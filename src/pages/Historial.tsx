@@ -453,6 +453,9 @@ const Historial: React.FC = () => {
                       <p><span className="font-medium">Fecha:</span> {new Date(selectedVenta.fecha_venta).toLocaleDateString('es-ES')}</p>
                       <p><span className="font-medium">Hora:</span> {new Date(selectedVenta.fecha_venta).toLocaleTimeString('es-ES')}</p>
                       <p><span className="font-medium">Vendedor:</span> {selectedVenta.vendedor}</p>
+                      {selectedVenta.numero_guia && (
+                        <p><span className="font-medium">N° de Guía:</span> <span className="text-blue-600 font-semibold">{selectedVenta.numero_guia}</span></p>
+                      )}
                       <p><span className="font-medium">Subtotal:</span> <span className="text-gray-900 font-semibold">S/ {(selectedVenta.detalles?.reduce((sum, d) => sum + (d.precio_unitario * d.cantidad), 0) || 0).toFixed(2)}</span></p>
                       {selectedVenta.descuento_total && selectedVenta.descuento_total > 0 && (
                         <p><span className="font-medium">Descuento:</span> <span className="text-emerald-600 font-semibold">- S/ {selectedVenta.descuento_total.toFixed(2)}</span></p>

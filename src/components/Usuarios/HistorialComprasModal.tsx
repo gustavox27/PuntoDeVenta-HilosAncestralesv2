@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Calendar, DollarSign, Package, X, Eye } from 'lucide-react';
+import { ShoppingBag, Calendar, DollarSign, Package, X, Eye, Download, Filter } from 'lucide-react';
 import { SupabaseService } from '../../services/supabaseService';
+import { ExportUtils } from '../../utils/exportUtils';
 import { Venta } from '../../types';
 import LoadingSpinner from '../Common/LoadingSpinner';
 import Modal from '../Common/Modal';
@@ -20,15 +21,44 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
   usuarioNombre
 }) => {
   const [ventas, setVentas] = useState<Venta[]>([]);
+  const [filteredVentas, setFilteredVentas] = useState<Venta[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedVenta, setSelectedVenta] = useState<Venta | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [fechaInicio, setFechaInicio] = useState<string>('');
+  const [fechaFin, setFechaFin] = useState<string>('');
 
   useEffect(() => {
     if (isOpen && usuarioId) {
       loadVentas();
     }
   }, [isOpen, usuarioId]);
+
+  useEffect(() => {
+    filterVentas();
+  }, [ventas, fechaInicio, fechaFin]);
+
+  const filterVentas = () => {
+    let filtered = [...ventas];
+
+    if (fechaInicio) {
+      const fechaInicioDate = new Date(fechaInicio);
+      fechaInicioDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter(venta =>
+        new Date(venta.fecha_venta) >= fechaInicioDate
+      );
+    }
+
+    if (fechaFin) {
+      const fechaFinDate = new Date(fechaFin);
+      fechaFinDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(venta =>
+        new Date(venta.fecha_venta) <= fechaFinDate
+      );
+    }
+
+    setFilteredVentas(filtered);
+  };
 
   const loadVentas = async () => {
     try {
@@ -49,14 +79,44 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
     setShowDetailModal(true);
   };
 
-  const totalCompras = ventas.reduce((acc, v) => {
+  const handleExportPDF = async () => {
+    try {
+      const exportData = filteredVentas.map(venta => {
+        const subtotal = venta.detalles?.reduce((sum, d) => sum + (d.precio_unitario * d.cantidad), 0) || 0;
+        const totalFinal = subtotal - (venta.descuento_total || 0);
+        return {
+          'Fecha': new Date(venta.fecha_venta).toLocaleDateString('es-ES'),
+          'Productos': venta.detalles?.map(d => d.producto?.nombre).join(', ') || '',
+          'Cantidad': venta.detalles?.reduce((sum, d) => sum + d.cantidad, 0) || 0,
+          'Subtotal': `S/ ${subtotal.toFixed(2)}`,
+          'Descuento': venta.descuento_total ? `S/ ${venta.descuento_total.toFixed(2)}` : 'S/ 0.00',
+          'Total': `S/ ${totalFinal.toFixed(2)}`,
+          'Estado': venta.completada || venta.saldo_pendiente === 0 ? 'Completada' : 'Pendiente'
+        };
+      });
+
+      await ExportUtils.exportToPDF(
+        exportData,
+        ['Fecha', 'Productos', 'Cantidad', 'Subtotal', 'Descuento', 'Total', 'Estado'],
+        `historial-compras-${usuarioNombre.replace(/\s+/g, '-')}`,
+        `Historial de Compras - ${usuarioNombre}`
+      );
+
+      toast.success('Reporte PDF generado correctamente');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Error al generar el reporte PDF');
+    }
+  };
+
+  const totalCompras = filteredVentas.reduce((acc, v) => {
     const subtotal = v.detalles?.reduce((sum, d) => sum + (d.precio_unitario * d.cantidad), 0) || 0;
     return acc + (subtotal - (v.descuento_total || 0));
   }, 0);
-  const totalDescuentos = ventas.reduce((acc, v) => acc + (v.descuento_total || 0), 0);
-  const saldoPendienteTotal = ventas.reduce((acc, v) => acc + (v.saldo_pendiente || 0), 0);
-  const ventasCompletas = ventas.filter(v => v.completada || v.saldo_pendiente === 0).length;
-  const ventasPendientes = ventas.filter(v => !v.completada && v.saldo_pendiente && v.saldo_pendiente > 0).length;
+  const totalDescuentos = filteredVentas.reduce((acc, v) => acc + (v.descuento_total || 0), 0);
+  const saldoPendienteTotal = filteredVentas.reduce((acc, v) => acc + (v.saldo_pendiente || 0), 0);
+  const ventasCompletas = filteredVentas.filter(v => v.completada || v.saldo_pendiente === 0).length;
+  const ventasPendientes = filteredVentas.filter(v => !v.completada && v.saldo_pendiente && v.saldo_pendiente > 0).length;
 
   return (
     <>
@@ -67,6 +127,51 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
         size="xl"
       >
         <div className="space-y-6">
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2 mb-3">
+              <Filter className="h-5 w-5 text-gray-600" />
+              <h4 className="font-semibold text-gray-900">Filtros de Fecha</h4>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Fecha Inicio</label>
+                <input
+                  type="date"
+                  value={fechaInicio}
+                  onChange={(e) => setFechaInicio(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Fecha Fin</label>
+                <input
+                  type="date"
+                  value={fechaFin}
+                  onChange={(e) => setFechaFin(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div className="flex items-end space-x-2">
+                <button
+                  onClick={() => {
+                    setFechaInicio('');
+                    setFechaFin('');
+                  }}
+                  className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium"
+                >
+                  Limpiar
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2 text-sm font-medium"
+                >
+                  <Download size={16} />
+                  <span>PDF</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
               <div className="flex items-center space-x-3">
@@ -75,7 +180,7 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
                 </div>
                 <div>
                   <p className="text-xs font-medium text-blue-700">Total Compras</p>
-                  <p className="text-lg font-bold text-blue-900">{ventas.length}</p>
+                  <p className="text-lg font-bold text-blue-900">{filteredVentas.length}</p>
                 </div>
               </div>
             </div>
@@ -130,7 +235,7 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
 
           {loading ? (
             <LoadingSpinner />
-          ) : ventas.length > 0 ? (
+          ) : filteredVentas.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -145,7 +250,7 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {ventas.map((venta) => {
+                  {filteredVentas.map((venta) => {
                     const subtotal = venta.detalles?.reduce((sum, d) => sum + (d.precio_unitario * d.cantidad), 0) || 0;
                     const totalFinal = subtotal - (venta.descuento_total || 0);
                     return (

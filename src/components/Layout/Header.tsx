@@ -52,33 +52,34 @@ const Header: React.FC<HeaderProps> = ({ title, currentUser, onLogout }) => {
   };
 
   return (
-    <div className={`shadow-sm border-b px-6 py-4 ${
+    <div className={`shadow-sm border-b px-3 sm:px-4 md:px-6 py-3 md:py-4 ${
       isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
     }`}>
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>{title}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 md:gap-4">
+        <h1 className={`text-lg sm:text-xl md:text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>{title}</h1>
 
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
-          <div className={`flex items-center space-x-6 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-            <div className="flex items-center space-x-2">
-              <Calendar size={16} />
-              <span className="capitalize">{currentDate}</span>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 md:gap-6">
+          <div className={`flex items-center space-x-3 sm:space-x-4 md:space-x-6 text-xs sm:text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+            <div className="flex items-center space-x-1.5 sm:space-x-2">
+              <Calendar size={14} className="sm:w-4 sm:h-4" />
+              <span className="capitalize hidden md:inline">{currentDate}</span>
+              <span className="capitalize md:hidden">{new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
             </div>
-            <div className="flex items-center space-x-2">
-              <Clock size={16} />
+            <div className="flex items-center space-x-1.5 sm:space-x-2">
+              <Clock size={14} className="sm:w-4 sm:h-4" />
               <span>{currentTime}</span>
             </div>
           </div>
 
           {currentUser && (
-            <div className={`flex items-center space-x-3 pl-6 border-l ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                  <User size={16} className="text-white" />
+            <div className={`flex items-center space-x-2 sm:space-x-3 pl-3 sm:pl-4 md:pl-6 border-l ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <div className="flex items-center space-x-1.5 sm:space-x-2">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <User size={14} className="text-white sm:w-4 sm:h-4" />
                 </div>
-                <div className="text-sm">
-                  <p className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{currentUser.nombre}</p>
-                  <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getPerfilColor(currentUser.perfil)}`}>
+                <div className="text-xs sm:text-sm">
+                  <p className={`font-semibold truncate max-w-[100px] sm:max-w-none ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{currentUser.nombre}</p>
+                  <span className={`px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-semibold rounded-full ${getPerfilColor(currentUser.perfil)}`}>
                     {currentUser.perfil}
                   </span>
                 </div>
@@ -87,14 +88,14 @@ const Header: React.FC<HeaderProps> = ({ title, currentUser, onLogout }) => {
               {onLogout && (
                 <button
                   onClick={onLogout}
-                  className={`p-2 rounded-lg transition-colors ${
+                  className={`p-1.5 sm:p-2 rounded-lg transition-colors ${
                     isDark
                       ? 'text-gray-400 hover:text-red-400 hover:bg-red-950'
                       : 'text-gray-600 hover:text-red-600 hover:bg-red-50'
                   }`}
                   title="Cerrar sesión"
                 >
-                  <LogOut size={18} />
+                  <LogOut size={16} className="sm:w-[18px] sm:h-[18px]" />
                 </button>
               )}
             </div>

@@ -35,6 +35,8 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
   });
   const [anticipoData, setAnticipoData] = useState<AnticipoData | null>(null);
   const [descuentoCarrito, setDescuentoCarrito] = useState<number>(0);
+  const [numeroGuia, setNumeroGuia] = useState<string>('');
+  const [showGuiaWarning, setShowGuiaWarning] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -235,6 +237,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
     setCarritoTemporal([]);
     setAnticipoData(null);
     setDescuentoCarrito(0);
+    setNumeroGuia('');
     toast.success('Carrito y cliente limpiados');
   };
 
@@ -268,6 +271,11 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
       return;
     }
 
+    if (!numeroGuia.trim()) {
+      setShowGuiaWarning(true);
+      return;
+    }
+
     try {
       setProcesandoVenta(true);
 
@@ -292,7 +300,8 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
         saldo_pendiente: saldoPendiente,
         descuento_total: descuentoCarrito,
         estado_pago: estadoPago,
-        completada: ventaCompletada
+        completada: ventaCompletada,
+        numero_guia: numeroGuia.trim()
       };
 
       const detalles = carrito.map(item => {
@@ -328,6 +337,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
       setUsuarioSeleccionado(null);
       setAnticipoData(null);
       setDescuentoCarrito(0);
+      setNumeroGuia('');
 
       const productosActualizados = await SupabaseService.getProductosVendibles();
       setProductos(productosActualizados);
@@ -361,7 +371,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                 <User className="mr-2 h-5 w-5" />
                 Cliente
               </h3>
-              
+
               {usuarioSeleccionado ? (
                 <div className="bg-white p-3 rounded-lg border">
                   <p className="font-medium">{usuarioSeleccionado.nombre}</p>
@@ -381,6 +391,23 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                   + Seleccionar Cliente
                 </button>
               )}
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                <Package className="mr-2 h-5 w-5" />
+                N° de Guía
+              </h3>
+              <input
+                type="text"
+                value={numeroGuia}
+                onChange={(e) => setNumeroGuia(e.target.value)}
+                placeholder="Ingrese el número de guía"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Campo obligatorio para procesar la venta
+              </p>
             </div>
           </div>
 
@@ -433,16 +460,26 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                       <div className="flex items-center space-x-3">
                         <button
                           onClick={() => actualizarCantidad(item.producto.id, item.cantidad - 1)}
-                          className="p-1 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                          className="p-1.5 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
                         >
-                          <Minus size={14} />
+                          <Minus size={16} />
                         </button>
-                        <span className="w-12 text-center font-medium">{item.cantidad}</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max={item.producto.stock}
+                          value={item.cantidad}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value) || 1;
+                            actualizarCantidad(item.producto.id, value);
+                          }}
+                          className="w-16 text-center text-base font-medium border-2 border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
                         <button
                           onClick={() => actualizarCantidad(item.producto.id, item.cantidad + 1)}
-                          className="p-1 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                          className="p-1.5 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
                         >
-                          <Plus size={14} />
+                          <Plus size={16} />
                         </button>
                       </div>
                       <span className="text-lg font-bold text-gray-900">
@@ -728,7 +765,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
         isOpen={showProductModal}
         onClose={cancelarSeleccion}
         title="Productos Disponibles"
-        size="xl"
+        size="2xl"
       >
         <div className="space-y-4">
           {/* Filtro de búsqueda */}
@@ -812,7 +849,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                           const value = parseInt(e.target.value) || 1;
                           actualizarCantidadTemporal(item.producto.id, value);
                         }}
-                        className="w-12 text-center text-sm border border-gray-300 rounded px-1 py-0.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-16 text-center text-base font-medium border-2 border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                       <button
                         onClick={() => actualizarCantidadTemporal(item.producto.id, item.cantidad + 1)}
@@ -859,6 +896,40 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
             >
               Agregar Productos al Carrito ({carritoTemporal.length})
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showGuiaWarning}
+        onClose={() => setShowGuiaWarning(false)}
+        title="N° de Guía Requerido"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start space-x-3 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex-shrink-0">
+              <svg className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-yellow-800">
+                Debe ingresar el número de guía
+              </h3>
+              <p className="mt-2 text-sm text-yellow-700">
+                El número de guía es un campo obligatorio para procesar la venta. Por favor, ingrese el número de guía antes de continuar.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={() => setShowGuiaWarning(false)}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              Entendido
             </button>
           </div>
         </div>

@@ -67,6 +67,9 @@ export class ExportUtils {
       doc.setFont('helvetica', 'normal');
       doc.text(`Cliente: ${usuario.nombre}`, 20, 60);
       doc.text(`DNI: ${usuario.dni}`, 20, 66);
+      if (venta.numero_guia) {
+        doc.text(`N° de Guía: ${venta.numero_guia}`, 20, 72);
+      }
       doc.text(`Fecha: ${new Date(venta.fecha_venta).toLocaleDateString('es-ES')}`, 120, 60);
       doc.text(`Vendedor: ${venta.vendedor}`, 120, 66);
       
@@ -102,7 +105,7 @@ export class ExportUtils {
       }
 
       (doc as any).autoTable({
-        startY: 75,
+        startY: venta.numero_guia ? 80 : 75,
         head: [['Producto', 'Cant.', 'P. Unit.', 'Subtotal']],
         body: tableData,
         styles: { fontSize: 9 },

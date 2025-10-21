@@ -15,10 +15,10 @@ const ChartCard: React.FC<ChartCardProps> = ({
   colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'] 
 }) => {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
-      
-      <div className="h-64">
+    <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">{title}</h3>
+
+      <div className="h-48 sm:h-64">
         <ResponsiveContainer width="100%" height="100%">
           {type === 'bar' ? (
             <BarChart data={data}>

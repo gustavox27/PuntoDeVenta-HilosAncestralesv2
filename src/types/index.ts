@@ -30,6 +30,7 @@ export interface Venta {
   total: number;
   vendedor: string;
   codigo_qr?: string;
+  numero_guia?: string;
   anticipo_total?: number;
   saldo_pendiente?: number;
   descuento_total?: number;
