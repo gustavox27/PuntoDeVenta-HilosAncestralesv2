@@ -56,12 +56,67 @@ export class SupabaseService {
     return data;
   }
 
-  static async deleteUsuario(id: string) {
+  static async getUserDataSummary(userId: string) {
+    const [ventasResult, anticiposResult] = await Promise.all([
+      supabase
+        .from('ventas')
+        .select('total')
+        .eq('id_usuario', userId),
+      supabase
+        .from('anticipos')
+        .select('monto')
+        .eq('cliente_id', userId)
+    ]);
+
+    const ventas = ventasResult.data || [];
+    const anticipos = anticiposResult.data || [];
+
+    return {
+      ventas: ventas.length,
+      totalVentas: ventas.reduce((sum, v) => sum + Number(v.total), 0),
+      anticipos: anticipos.length,
+      totalAnticipos: anticipos.reduce((sum, a) => sum + Number(a.monto), 0)
+    };
+  }
+
+  static async deleteUsuario(id: string, deleteRelatedData: boolean = false) {
     const { data: usuario } = await supabase
       .from('usuarios')
       .select('nombre')
       .eq('id', id)
       .single();
+
+    if (deleteRelatedData) {
+      const { data: ventas } = await supabase
+        .from('ventas')
+        .select('id')
+        .eq('id_usuario', id);
+
+      if (ventas && ventas.length > 0) {
+        const ventaIds = ventas.map(v => v.id);
+
+        await supabase
+          .from('ventas_detalle')
+          .delete()
+          .in('id_venta', ventaIds);
+
+        await supabase
+          .from('anticipos')
+          .delete()
+          .in('venta_id', ventaIds);
+      }
+
+      await supabase
+        .from('anticipos')
+        .delete()
+        .eq('cliente_id', id)
+        .is('venta_id', null);
+
+      await supabase
+        .from('ventas')
+        .delete()
+        .eq('id_usuario', id);
+    }
 
     const { error } = await supabase
       .from('usuarios')
@@ -72,7 +127,7 @@ export class SupabaseService {
 
     await this.createEvento({
       tipo: 'Usuario',
-      descripcion: `Usuario eliminado: ${usuario?.nombre || 'Desconocido'}`,
+      descripcion: `Usuario eliminado: ${usuario?.nombre || 'Desconocido'}${deleteRelatedData ? ' (con datos relacionados)' : ''}`,
       modulo: 'Usuarios',
       accion: 'Eliminar',
       entidad_id: id,

@@ -7,6 +7,7 @@ import LoadingSpinner from '../components/Common/LoadingSpinner';
 import Modal from '../components/Common/Modal';
 import MetricCard from '../components/Dashboard/MetricCard';
 import HistorialComprasModal from '../components/Usuarios/HistorialComprasModal';
+import DeleteUserModal from '../components/Usuarios/DeleteUserModal';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -19,6 +20,8 @@ const UsuariosPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState<Usuario | null>(null);
+  const [userDataSummary, setUserDataSummary] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showHistorialModal, setShowHistorialModal] = useState(false);
   const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
   const [formData, setFormData] = useState({
@@ -115,23 +118,34 @@ const UsuariosPage: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleDeleteClick = (usuario: Usuario) => {
-    setUserToDelete(usuario);
-    setShowDeleteModal(true);
+  const handleDeleteClick = async (usuario: Usuario) => {
+    try {
+      const summary = await SupabaseService.getUserDataSummary(usuario.id);
+      setUserDataSummary(summary);
+      setUserToDelete(usuario);
+      setShowDeleteModal(true);
+    } catch (error) {
+      console.error('Error getting user data summary:', error);
+      toast.error('Error al obtener información del usuario');
+    }
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = async (deleteRelatedData: boolean) => {
     if (!userToDelete) return;
 
     try {
-      await SupabaseService.deleteUsuario(userToDelete.id);
+      setIsDeleting(true);
+      await SupabaseService.deleteUsuario(userToDelete.id, deleteRelatedData);
       toast.success('Usuario eliminado correctamente');
-      loadUsuarios();
+      await loadUsuarios();
       setShowDeleteModal(false);
       setUserToDelete(null);
+      setUserDataSummary(null);
     } catch (error) {
       console.error('Error deleting user:', error);
       toast.error('Error al eliminar usuario');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -467,42 +481,18 @@ const UsuariosPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal de Confirmación de Eliminación */}
-      <Modal
+      <DeleteUserModal
         isOpen={showDeleteModal}
         onClose={() => {
           setShowDeleteModal(false);
           setUserToDelete(null);
+          setUserDataSummary(null);
         }}
-        title="Confirmar Eliminación"
-        size="md"
-      >
-        <div className="text-center py-4">
-          <AlertTriangle className="mx-auto h-12 w-12 text-red-600 mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">¿Está seguro?</h3>
-          <p className="text-gray-600 mb-6">
-            Esta acción eliminará permanentemente al usuario "{userToDelete?.nombre}" y no se puede deshacer.
-          </p>
-          
-          <div className="flex justify-center space-x-4">
-            <button
-              onClick={() => {
-                setShowDeleteModal(false);
-                setUserToDelete(null);
-              }}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleConfirmDelete}
-              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Eliminar
-            </button>
-          </div>
-        </div>
-      </Modal>
+        onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
+        userName={userToDelete?.nombre || ''}
+        userDataSummary={userDataSummary}
+      />
 
       {/* Modal de Usuario */}
       <Modal
