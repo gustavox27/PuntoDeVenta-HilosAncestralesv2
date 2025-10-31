@@ -45,7 +45,8 @@ const Inventario: React.FC = () => {
     nombre: 'Madejas Crudas',
     color: '',
     cantidad: '',
-    descripcion: ''
+    descripcion: '',
+    fecha_registro: new Date().toISOString().split('T')[0]
   });
   
   const [hilanderiaData, setHilanderiaData] = useState({
@@ -148,7 +149,8 @@ const Inventario: React.FC = () => {
       nombre: 'Madejas Crudas',
       color: '',
       cantidad: '',
-      descripcion: ''
+      descripcion: '',
+      fecha_registro: new Date().toISOString().split('T')[0]
     });
     setHilanderiaData({
       estado: 'Conos Devanados',
@@ -174,8 +176,8 @@ const Inventario: React.FC = () => {
         precio_uni: 0,
         stock: 0,
         cantidad: parseInt(tintoreriaData.cantidad),
-        fecha_ingreso: new Date().toISOString(),
-        fecha_registro: new Date().toISOString()
+        fecha_ingreso: new Date(tintoreriaData.fecha_registro).toISOString(),
+        fecha_registro: new Date(tintoreriaData.fecha_registro).toISOString()
       };
 
       await SupabaseService.createProducto(productoData);
@@ -774,6 +776,21 @@ const Inventario: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Ingrese la cantidad"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Fecha de Registro <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              required
+              value={tintoreriaData.fecha_registro}
+              onChange={(e) => setTintoreriaData({ ...tintoreriaData, fecha_registro: e.target.value })}
+              max={new Date().toISOString().split('T')[0]}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">Fecha en que se registra el producto en el sistema</p>
           </div>
 
           <div>

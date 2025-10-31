@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Calendar, DollarSign, Package, X, Eye, Download, Filter } from 'lucide-react';
+import { ShoppingBag, Calendar, DollarSign, Package, X, Eye, Download, Filter, Clock, CreditCard, FileText } from 'lucide-react';
 import { SupabaseService } from '../../services/supabaseService';
 import { ExportUtils } from '../../utils/exportUtils';
 import { Venta } from '../../types';
@@ -27,10 +27,14 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [fechaInicio, setFechaInicio] = useState<string>('');
   const [fechaFin, setFechaFin] = useState<string>('');
+  const [anticipoInicial, setAnticipoInicial] = useState<number>(0);
+  const [anticiposIniciales, setAnticiposIniciales] = useState<any[]>([]);
+  const [showAnticiposModal, setShowAnticiposModal] = useState(false);
 
   useEffect(() => {
     if (isOpen && usuarioId) {
       loadVentas();
+      loadAnticipoInicial();
     }
   }, [isOpen, usuarioId]);
 
@@ -71,6 +75,18 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
       toast.error('Error al cargar el historial de compras');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAnticipoInicial = async () => {
+    try {
+      const anticipos = await SupabaseService.getAnticiposPorCliente(usuarioId);
+      const anticiposSinVenta = anticipos.filter(a => !a.venta_id);
+      setAnticiposIniciales(anticiposSinVenta);
+      const totalDisponible = anticiposSinVenta.reduce((sum, a) => sum + a.monto, 0);
+      setAnticipoInicial(totalDisponible);
+    } catch (error) {
+      console.error('Error loading anticipo inicial:', error);
     }
   };
 
@@ -172,52 +188,80 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white rounded-lg shadow-sm">
-                  <ShoppingBag className="h-5 w-5 text-blue-600" />
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 bg-white rounded-lg shadow-sm">
+                  <ShoppingBag className="h-4 w-4 text-blue-600" />
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-blue-700">Total Compras</p>
-                  <p className="text-lg font-bold text-blue-900">{filteredVentas.length}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white rounded-lg shadow-sm">
-                  <DollarSign className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-green-700">Total Gastado</p>
-                  <p className="text-lg font-bold text-green-900">S/ {totalCompras.toFixed(2)}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-medium text-blue-700 truncate">Total Compras</p>
+                  <p className="text-base font-bold text-blue-900">{filteredVentas.length}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white rounded-lg shadow-sm">
-                  <Package className="h-5 w-5 text-purple-600" />
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 bg-white rounded-lg shadow-sm">
+                  <DollarSign className="h-4 w-4 text-green-600" />
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-purple-700">Descuentos</p>
-                  <p className="text-lg font-bold text-purple-900">S/ {totalDescuentos.toFixed(2)}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-medium text-green-700 truncate">Total Gastado</p>
+                  <p className="text-base font-bold text-green-900">S/ {totalCompras.toFixed(2)}</p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white rounded-lg shadow-sm">
-                  <Calendar className="h-5 w-5 text-orange-600" />
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 border border-purple-200">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 bg-white rounded-lg shadow-sm">
+                  <Package className="h-4 w-4 text-purple-600" />
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-orange-700">Saldo Pendiente</p>
-                  <p className="text-lg font-bold text-orange-900">S/ {saldoPendienteTotal.toFixed(2)}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-medium text-purple-700 truncate">Descuentos</p>
+                  <p className="text-base font-bold text-purple-900">S/ {totalDescuentos.toFixed(2)}</p>
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 border border-orange-200">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 bg-white rounded-lg shadow-sm">
+                  <Calendar className="h-4 w-4 text-orange-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-medium text-orange-700 truncate">Saldo Pendiente</p>
+                  <p className="text-base font-bold text-orange-900">S/ {saldoPendienteTotal.toFixed(2)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div
+              onClick={() => {
+                if (anticiposIniciales.length > 0) {
+                  setShowAnticiposModal(true);
+                }
+              }}
+              className={`bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-3 border border-emerald-200 ${
+                anticiposIniciales.length > 0 ? 'cursor-pointer hover:shadow-md transition-all hover:scale-105' : ''
+              }`}
+              title={anticiposIniciales.length > 0 ? 'Click para ver historial de anticipos iniciales' : ''}
+            >
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 bg-white rounded-lg shadow-sm">
+                  <DollarSign className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-medium text-emerald-700 truncate">Anticipo Inicial{anticiposIniciales.length > 0 ? ` (${anticiposIniciales.length})` : ''}</p>
+                  <p className="text-base font-bold text-emerald-900">S/ {anticipoInicial.toFixed(2)}</p>
+                  {anticiposIniciales.length > 0 && (
+                    <p className="text-[9px] text-emerald-600 mt-0.5">Click para ver detalles</p>
+                  )}
+                </div>
+                {anticiposIniciales.length > 0 && (
+                  <Eye className="h-4 w-4 text-emerald-600" />
+                )}
               </div>
             </div>
           </div>
@@ -441,6 +485,118 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={showAnticiposModal}
+        onClose={() => setShowAnticiposModal(false)}
+        title="Historial de Anticipos Iniciales"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg p-4 border border-emerald-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-lg font-bold text-gray-900">Total Disponible</h4>
+                <p className="text-sm text-gray-600">Anticipos sin utilizar en ventas</p>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-bold text-emerald-600">
+                  S/ {anticipoInicial.toFixed(2)}
+                </p>
+                <p className="text-sm text-gray-600">{anticiposIniciales.length} anticipo(s)</p>
+              </div>
+            </div>
+          </div>
+
+          {anticiposIniciales.length > 0 ? (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {anticiposIniciales.map((anticipo, index) => (
+                <div
+                  key={anticipo.id}
+                  className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+                        <DollarSign className="h-5 w-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-gray-900">Anticipo #{index + 1}</h5>
+                        <p className="text-xs text-gray-500">
+                          ID: {anticipo.id.substring(0, 8)}...
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-emerald-600">
+                        S/ {anticipo.monto.toFixed(2)}
+                      </p>
+                      <span className="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        Disponible
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 pt-3 border-t border-gray-100">
+                    <div className="flex items-start space-x-2">
+                      <Calendar className="h-4 w-4 text-gray-400 mt-0.5" />
+                      <div>
+                        <p className="text-xs text-gray-500">Fecha de Registro</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {new Date(anticipo.fecha_anticipo).toLocaleDateString('es-ES', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-2">
+                      <CreditCard className="h-4 w-4 text-gray-400 mt-0.5" />
+                      <div>
+                        <p className="text-xs text-gray-500">Método de Pago</p>
+                        <p className="text-sm font-medium text-gray-900 capitalize">
+                          {anticipo.metodo_pago}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {anticipo.observaciones && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <div className="flex items-start space-x-2">
+                        <FileText className="h-4 w-4 text-gray-400 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500">Observaciones</p>
+                          <p className="text-sm text-gray-700">{anticipo.observaciones}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 bg-gray-50 rounded-lg">
+              <DollarSign className="mx-auto h-12 w-12 text-gray-400 mb-3" />
+              <p className="text-gray-500 font-medium">No hay anticipos iniciales disponibles</p>
+              <p className="text-sm text-gray-400 mt-1">
+                Los anticipos utilizados en ventas no se muestran aquí
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-4 border-t">
+            <button
+              onClick={() => setShowAnticiposModal(false)}
+              className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
       </Modal>
     </>
   );

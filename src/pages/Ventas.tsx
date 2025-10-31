@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Plus, Minus, Trash2, User, Package, Receipt, Search, X, Filter, ShoppingBag, Eraser } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, User, Package, Receipt, Search, X, Filter, ShoppingBag, Eraser, DollarSign } from 'lucide-react';
 import { SupabaseService } from '../services/supabaseService';
 import { ExportUtils } from '../utils/exportUtils';
 import { Usuario, Producto, CarritoItem } from '../types';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import Modal from '../components/Common/Modal';
 import AnticipoForm, { AnticipoData } from '../components/Ventas/AnticipoForm';
+import AnticipoInicialModal from '../components/Ventas/AnticipoInicialModal';
+import AnticipoConfirmModal from '../components/Ventas/AnticipoConfirmModal';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -23,6 +25,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
   const [loading, setLoading] = useState(true);
   const [procesandoVenta, setProcesandoVenta] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [modalPurpose, setModalPurpose] = useState<'venta' | 'anticipo'>('venta');
   const [showProductModal, setShowProductModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [searchUser, setSearchUser] = useState('');
@@ -31,16 +34,30 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
   const [newUserData, setNewUserData] = useState({
     nombre: '',
     telefono: '',
-    dni: ''
+    dni: '',
+    direccion: '',
+    perfil: 'Cliente' as 'Cliente'
   });
   const [anticipoData, setAnticipoData] = useState<AnticipoData | null>(null);
   const [descuentoCarrito, setDescuentoCarrito] = useState<number>(0);
   const [numeroGuia, setNumeroGuia] = useState<string>('');
   const [showGuiaWarning, setShowGuiaWarning] = useState(false);
+  const [showAnticipoInicialModal, setShowAnticipoInicialModal] = useState(false);
+  const [clienteParaAnticipo, setClienteParaAnticipo] = useState<Usuario | null>(null);
+  const [procesandoAnticipo, setProcesandoAnticipo] = useState(false);
+  const [anticiposDisponibles, setAnticiposDisponibles] = useState<{ [key: string]: number }>({});
+  const [showAnticipoConfirmModal, setShowAnticipoConfirmModal] = useState(false);
+  const [clienteConAnticiposPrevios, setClienteConAnticiposPrevios] = useState<Usuario | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (usuarioSeleccionado) {
+      checkAnticiposDisponibles(usuarioSeleccionado.id);
+    }
+  }, [usuarioSeleccionado]);
 
   useEffect(() => {
     filterUsuarios();
@@ -102,16 +119,31 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
     setFilteredProductos(filtered);
   };
 
+  const checkAnticiposDisponibles = async (clienteId: string) => {
+    try {
+      const anticipos = await SupabaseService.getAnticiposPorCliente(clienteId);
+      const anticiposSinVenta = anticipos.filter(a => !a.venta_id);
+      const totalDisponible = anticiposSinVenta.reduce((sum, a) => sum + a.monto, 0);
+
+      if (totalDisponible > 0) {
+        setAnticiposDisponibles({ [clienteId]: totalDisponible });
+        toast.success(`Cliente tiene S/ ${totalDisponible.toFixed(2)} en anticipos disponibles`);
+      }
+    } catch (error) {
+      console.error('Error checking anticipos:', error);
+    }
+  };
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       const nuevoUsuario = await SupabaseService.createUsuario(newUserData);
       
       setUsuarios([nuevoUsuario, ...usuarios]);
       setUsuarioSeleccionado(nuevoUsuario);
-      
-      setNewUserData({ nombre: '', telefono: '', dni: '' });
+
+      setNewUserData({ nombre: '', telefono: '', dni: '', direccion: '', perfil: 'Cliente' });
       setShowAddUserModal(false);
       setShowUserModal(false);
       
@@ -252,12 +284,45 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
 
   const calcularSaldoPendiente = () => {
     const total = calcularTotal();
-    const anticipo = anticipoData?.monto || 0;
-    return total - anticipo;
+    const anticipoNuevo = anticipoData?.monto || 0;
+    const anticiposDisp = usuarioSeleccionado ? (anticiposDisponibles[usuarioSeleccionado.id] || 0) : 0;
+    const anticipoTotal = anticipoNuevo + anticiposDisp;
+    return Math.max(0, total - anticipoTotal);
   };
 
   const calcularTotalTemporal = () => {
     return carritoTemporal.reduce((total, item) => total + (item.producto.precio_uni * item.cantidad), 0);
+  };
+
+  const handleRegistrarAnticipoInicial = async (data: {
+    monto: number;
+    metodo_pago: string;
+    fecha_anticipo: string;
+    observaciones?: string;
+  }) => {
+    if (!clienteParaAnticipo) return;
+
+    try {
+      setProcesandoAnticipo(true);
+
+      await SupabaseService.createAnticipo({
+        cliente_id: clienteParaAnticipo.id,
+        monto: data.monto,
+        metodo_pago: data.metodo_pago,
+        fecha_anticipo: data.fecha_anticipo,
+        observaciones: data.observaciones
+      });
+
+      toast.success(`Anticipo de S/ ${data.monto.toFixed(2)} registrado correctamente`);
+
+      setShowAnticipoInicialModal(false);
+      setClienteParaAnticipo(null);
+    } catch (error) {
+      console.error('Error registering anticipo:', error);
+      toast.error('Error al registrar el anticipo');
+    } finally {
+      setProcesandoAnticipo(false);
+    }
   };
 
   const procesarVenta = async () => {
@@ -280,15 +345,23 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
       setProcesandoVenta(true);
 
       const total = calcularTotal();
-      const anticipoTotal = anticipoData?.monto || 0;
+      let anticipoTotal = anticipoData?.monto || 0;
       const codigoQR = uuidv4();
 
-      // Si NO hay anticipo, significa que el cliente pagó completo
-      // Si HAY anticipo, el saldo pendiente es: (total - descuento) - anticipo
-      // El total ya incluye el descuento restado, por lo que el cálculo es directo
-      const saldoPendiente = anticipoData ? total - anticipoTotal : 0;
-      const estadoPago = anticipoData ? (saldoPendiente > 0 ? 'pendiente' as const : 'completo' as const) : 'completo' as const;
-      const ventaCompletada = saldoPendiente === 0;
+      const anticiposDisponiblesCliente = anticiposDisponibles[usuarioSeleccionado.id] || 0;
+      if (anticiposDisponiblesCliente > 0) {
+        anticipoTotal += anticiposDisponiblesCliente;
+      }
+
+      let saldoPendiente = 0;
+      let estadoPago: 'completo' | 'pendiente' = 'completo';
+      let ventaCompletada = true;
+
+      if (anticipoData) {
+        saldoPendiente = Math.max(0, total - anticipoTotal);
+        estadoPago = saldoPendiente > 0 ? 'pendiente' : 'completo';
+        ventaCompletada = saldoPendiente === 0;
+      }
 
       const venta = {
         id_usuario: usuarioSeleccionado.id,
@@ -317,6 +390,17 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
 
       const ventaCreada = await SupabaseService.createVenta(venta, detalles);
 
+      if (anticiposDisponiblesCliente > 0) {
+        const anticiposPrevios = await SupabaseService.getAnticiposPorCliente(usuarioSeleccionado.id);
+        const anticiposSinVenta = anticiposPrevios.filter(a => !a.venta_id);
+
+        for (const anticipo of anticiposSinVenta) {
+          await SupabaseService.updateAnticipo(anticipo.id, {
+            venta_id: ventaCreada.id
+          });
+        }
+      }
+
       if (anticipoData) {
         await SupabaseService.createAnticipo({
           venta_id: ventaCreada.id,
@@ -338,6 +422,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
       setAnticipoData(null);
       setDescuentoCarrito(0);
       setNumeroGuia('');
+      setAnticiposDisponibles({});
 
       const productosActualizados = await SupabaseService.getProductosVendibles();
       setProductos(productosActualizados);
@@ -385,7 +470,10 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                 </div>
               ) : (
                 <button
-                  onClick={() => setShowUserModal(true)}
+                  onClick={() => {
+                    setModalPurpose('venta');
+                    setShowUserModal(true);
+                  }}
                   className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors"
                 >
                   + Seleccionar Cliente
@@ -393,7 +481,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
               )}
             </div>
 
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
                 <Package className="mr-2 h-5 w-5" />
                 N° de Guía
@@ -408,6 +496,26 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
               <p className="text-xs text-gray-500 mt-1">
                 Campo obligatorio para procesar la venta
               </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg p-4 border border-emerald-200">
+              <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center">
+                <DollarSign className="mr-2 h-4 w-4 text-emerald-600" />
+                Anticipo Inicial
+              </h3>
+              <p className="text-xs text-gray-600 mb-3">
+                Registra anticipos sin venta asociada
+              </p>
+              <button
+                onClick={() => {
+                  setModalPurpose('anticipo');
+                  setShowUserModal(true);
+                }}
+                className="w-full px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center space-x-2 font-medium text-sm shadow-sm"
+              >
+                <DollarSign size={16} />
+                <span>Registrar Anticipo</span>
+              </button>
             </div>
           </div>
 
@@ -551,22 +659,31 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                       </span>
                     </div>
 
-                    {anticipoData && (
-                      <>
-                        <div className="flex justify-between items-center text-blue-600">
-                          <span className="text-lg font-medium">Anticipo:</span>
-                          <span className="text-xl font-bold">
-                            - S/ {anticipoData.monto.toFixed(2)}
-                          </span>
-                        </div>
+                    {usuarioSeleccionado && anticiposDisponibles[usuarioSeleccionado.id] > 0 && (
+                      <div className="flex justify-between items-center text-emerald-600">
+                        <span className="text-lg font-medium">Anticipo Previo:</span>
+                        <span className="text-xl font-bold">
+                          - S/ {anticiposDisponibles[usuarioSeleccionado.id].toFixed(2)}
+                        </span>
+                      </div>
+                    )}
 
-                        <div className="flex justify-between items-center pt-3 border-t border-gray-200">
-                          <span className="text-xl font-bold text-gray-900">Saldo Pendiente:</span>
-                          <span className="text-2xl font-bold text-red-600">
-                            S/ {calcularSaldoPendiente().toFixed(2)}
-                          </span>
-                        </div>
-                      </>
+                    {anticipoData && (
+                      <div className="flex justify-between items-center text-blue-600">
+                        <span className="text-lg font-medium">Anticipo Actual:</span>
+                        <span className="text-xl font-bold">
+                          - S/ {anticipoData.monto.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+
+                    {(anticipoData || (usuarioSeleccionado && anticiposDisponibles[usuarioSeleccionado.id] > 0)) && (
+                      <div className="flex justify-between items-center pt-3 border-t border-gray-200">
+                        <span className="text-xl font-bold text-gray-900">Saldo Pendiente:</span>
+                        <span className="text-2xl font-bold text-red-600">
+                          S/ {calcularSaldoPendiente().toFixed(2)}
+                        </span>
+                      </div>
                     )}
                   </div>
 
@@ -576,6 +693,9 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                         <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                         <p className="text-sm font-medium text-green-800">
                           Venta completa - El cliente pagará el total
+                          {usuarioSeleccionado && anticiposDisponibles[usuarioSeleccionado.id] > 0 && (
+                            <span> (incluyendo anticipos iniciales)</span>
+                          )}
                         </p>
                       </div>
                       {descuentoCarrito > 0 && (
@@ -583,10 +703,26 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                           Con descuento de S/ {descuentoCarrito.toFixed(2)} aplicado
                         </p>
                       )}
+                      {usuarioSeleccionado && anticiposDisponibles[usuarioSeleccionado.id] > 0 && (
+                        <p className="text-xs text-green-700 mt-1 ml-4">
+                          Anticipo inicial de S/ {anticiposDisponibles[usuarioSeleccionado.id].toFixed(2)} se aplicará automáticamente
+                        </p>
+                      )}
                     </div>
                   )}
 
-                  {anticipoData && calcularSaldoPendiente() > 0 && (
+                  {calcularSaldoPendiente() === 0 && (anticipoData || (usuarioSeleccionado && anticiposDisponibles[usuarioSeleccionado.id] > 0)) && (
+                    <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                        <p className="text-sm font-medium text-emerald-800">
+                          Venta cubierta totalmente con anticipos
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {calcularSaldoPendiente() > 0 && (anticipoData || (usuarioSeleccionado && anticiposDisponibles[usuarioSeleccionado.id] > 0)) && (
                     <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
@@ -662,9 +798,34 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
             {filteredUsuarios.map(usuario => (
               <div
                 key={usuario.id}
-                onClick={() => {
-                  setUsuarioSeleccionado(usuario);
-                  setShowUserModal(false);
+                onClick={async () => {
+                  if (modalPurpose === 'anticipo') {
+                    try {
+                      const anticipos = await SupabaseService.getAnticiposPorCliente(usuario.id);
+                      const anticiposSinVenta = anticipos.filter(a => !a.venta_id);
+                      const totalDisponible = anticiposSinVenta.reduce((sum, a) => sum + a.monto, 0);
+
+                      if (totalDisponible > 0) {
+                        setAnticiposDisponibles(prev => ({
+                          ...prev,
+                          [usuario.id]: totalDisponible
+                        }));
+                        setClienteConAnticiposPrevios(usuario);
+                        setShowAnticipoConfirmModal(true);
+                        return;
+                      }
+
+                      setClienteParaAnticipo(usuario);
+                      setShowUserModal(false);
+                      setShowAnticipoInicialModal(true);
+                    } catch (error) {
+                      console.error('Error checking anticipos:', error);
+                      toast.error('Error al verificar anticipos previos');
+                    }
+                  } else {
+                    setUsuarioSeleccionado(usuario);
+                    setShowUserModal(false);
+                  }
                   setSearchUser('');
                 }}
                 className="p-3 border rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors"
@@ -691,42 +852,53 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
         isOpen={showAddUserModal}
         onClose={() => {
           setShowAddUserModal(false);
-          setNewUserData({ nombre: '', telefono: '', dni: '' });
+          setNewUserData({ nombre: '', telefono: '', dni: '', direccion: '', perfil: 'Cliente' });
         }}
-        title="Agregar Nuevo Cliente"
+        title="Nuevo Usuario"
         size="md"
       >
         <form onSubmit={handleCreateUser} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Completo</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre o Razón Social</label>
             <input
               type="text"
               required
               value={newUserData.nombre}
               onChange={(e) => setNewUserData({ ...newUserData, nombre: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Ingrese el nombre completo"
+              placeholder="Ingrese el nombre o razón social"
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">DNI</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">DNI/RUC</label>
             <input
               type="text"
               required
-              maxLength={8}
+              maxLength={11}
               value={newUserData.dni}
               onChange={(e) => {
                 const value = e.target.value.replace(/\D/g, '');
                 setNewUserData({ ...newUserData, dni: value });
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="12345678"
+              placeholder="DNI: 12345678 o RUC: 12345678901"
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono (Opcional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+            <input
+              type="text"
+              value={newUserData.direccion}
+              onChange={(e) => setNewUserData({ ...newUserData, direccion: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Ingrese la dirección"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nro. de Contacto</label>
             <input
               type="text"
               value={newUserData.telefono}
@@ -738,13 +910,13 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
               placeholder="987654321"
             />
           </div>
-          
+
           <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
               onClick={() => {
                 setShowAddUserModal(false);
-                setNewUserData({ nombre: '', telefono: '', dni: '' });
+                setNewUserData({ nombre: '', telefono: '', dni: '', direccion: '', perfil: 'Cliente' });
               }}
               className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
@@ -754,7 +926,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
               type="submit"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
-              Crear Cliente
+              Crear Usuario
             </button>
           </div>
         </form>
@@ -934,6 +1106,36 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
           </div>
         </div>
       </Modal>
+
+      <AnticipoInicialModal
+        isOpen={showAnticipoInicialModal}
+        onClose={() => {
+          setShowAnticipoInicialModal(false);
+          setClienteParaAnticipo(null);
+        }}
+        clienteNombre={clienteParaAnticipo?.nombre || ''}
+        onSubmit={handleRegistrarAnticipoInicial}
+        loading={procesandoAnticipo}
+      />
+
+      <AnticipoConfirmModal
+        isOpen={showAnticipoConfirmModal}
+        onClose={() => {
+          setShowAnticipoConfirmModal(false);
+          setClienteConAnticiposPrevios(null);
+        }}
+        onConfirm={() => {
+          if (clienteConAnticiposPrevios) {
+            setClienteParaAnticipo(clienteConAnticiposPrevios);
+            setShowUserModal(false);
+            setShowAnticipoConfirmModal(false);
+            setShowAnticipoInicialModal(true);
+            setClienteConAnticiposPrevios(null);
+          }
+        }}
+        clienteNombre={clienteConAnticiposPrevios?.nombre || ''}
+        montoDisponible={clienteConAnticiposPrevios ? (anticiposDisponibles[clienteConAnticiposPrevios.id] || 0) : 0}
+      />
     </div>
   );
 };
