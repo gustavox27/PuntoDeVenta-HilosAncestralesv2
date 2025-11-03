@@ -386,6 +386,28 @@ export class SupabaseService {
     }
   }
 
+  static async updateVenta(id: string, updates: Partial<Venta>) {
+    const { data, error } = await supabase
+      .from('ventas')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await this.createEvento({
+      tipo: 'Venta',
+      descripcion: `Venta actualizada: ${updates.numero_guia ? `N° de Guía: ${updates.numero_guia}` : 'Información actualizada'}`,
+      modulo: 'Historial',
+      accion: 'Actualizar',
+      entidad_id: id,
+      entidad_tipo: 'venta'
+    });
+
+    return data;
+  }
+
   // EVENTOS
   static async getEventos(limit = 10) {
     const { data, error } = await supabase

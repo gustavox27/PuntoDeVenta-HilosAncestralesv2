@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { History, Download, Search, Calendar, Eye, DollarSign, CheckCircle, Clock } from 'lucide-react';
+import { History, Download, Search, Calendar, Eye, DollarSign, CheckCircle, Clock, Edit2, Save, X } from 'lucide-react';
 import { SupabaseService } from '../services/supabaseService';
 import { ExportUtils } from '../utils/exportUtils';
 import { Venta } from '../types';
@@ -22,6 +22,10 @@ const Historial: React.FC = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'completas' | 'pendientes'>('completas');
   const [detailTab, setDetailTab] = useState<'productos' | 'anticipos'>('productos');
+  const [showEditGuiaModal, setShowEditGuiaModal] = useState(false);
+  const [ventaToEdit, setVentaToEdit] = useState<Venta | null>(null);
+  const [newNumeroGuia, setNewNumeroGuia] = useState('');
+  const [isUpdatingGuia, setIsUpdatingGuia] = useState(false);
 
   useEffect(() => {
     loadVentas();
@@ -175,6 +179,41 @@ const Historial: React.FC = () => {
     setShowDetailModal(false);
     await loadVentas();
     toast.success('Venta actualizada');
+  };
+
+  const handleEditGuia = (venta: Venta) => {
+    setVentaToEdit(venta);
+    setNewNumeroGuia(venta.numero_guia || '');
+    setShowEditGuiaModal(true);
+  };
+
+  const handleUpdateGuia = async () => {
+    if (!ventaToEdit) return;
+
+    if (!newNumeroGuia.trim()) {
+      toast.error('El número de guía no puede estar vacío');
+      return;
+    }
+
+    try {
+      setIsUpdatingGuia(true);
+
+      await SupabaseService.updateVenta(ventaToEdit.id, {
+        numero_guia: newNumeroGuia.trim()
+      });
+
+      await loadVentas();
+
+      toast.success('Número de guía actualizado correctamente');
+      setShowEditGuiaModal(false);
+      setVentaToEdit(null);
+      setNewNumeroGuia('');
+    } catch (error) {
+      console.error('Error updating numero_guia:', error);
+      toast.error('Error al actualizar el número de guía');
+    } finally {
+      setIsUpdatingGuia(false);
+    }
   };
 
   const totalVentas = filteredVentas.reduce((acc, venta) => acc + venta.total, 0);
@@ -400,6 +439,13 @@ const Historial: React.FC = () => {
                         <Eye size={16} />
                       </button>
                       <button
+                        onClick={() => handleEditGuia(venta)}
+                        className="text-orange-600 hover:text-orange-900 flex items-center space-x-1"
+                        title="Editar N° de Guía"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
                         onClick={() => handleGenerateBoleta(venta)}
                         className="text-green-600 hover:text-green-900 flex items-center space-x-1"
                         title="Descargar boleta"
@@ -601,6 +647,139 @@ const Historial: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={showEditGuiaModal}
+        onClose={() => {
+          setShowEditGuiaModal(false);
+          setVentaToEdit(null);
+          setNewNumeroGuia('');
+        }}
+        title="Editar Número de Guía"
+        size="md"
+      >
+        {ventaToEdit && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg p-4 border border-orange-200">
+              <div className="flex items-start space-x-3">
+                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Edit2 className="h-5 w-5 text-orange-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-gray-900 mb-1">Actualización de Guía de Remisión</h4>
+                  <p className="text-xs text-gray-600">
+                    Modifica el número de guía:
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <h5 className="text-sm font-semibold text-gray-900 mb-3">Información de la Venta</h5>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <p className="text-gray-600">Fecha:</p>
+                  <p className="font-semibold text-gray-900">
+                    {new Date(ventaToEdit.fecha_venta).toLocaleDateString('es-ES', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Cliente:</p>
+                  <p className="font-semibold text-gray-900">
+                    {ventaToEdit.usuario_eliminado
+                      ? (ventaToEdit.usuario_eliminado_nombre || 'Usuario Eliminado')
+                      : (ventaToEdit.usuario?.nombre || 'N/A')
+                    }
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Total:</p>
+                  <p className="font-semibold text-blue-600">S/ {ventaToEdit.total.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Vendedor:</p>
+                  <p className="font-semibold text-gray-900">{ventaToEdit.vendedor}</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                Número de Guía de Remisión
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={newNumeroGuia}
+                  onChange={(e) => setNewNumeroGuia(e.target.value)}
+                  disabled={isUpdatingGuia}
+                  placeholder="Ingrese el nuevo número de guía"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed font-mono text-base"
+                  autoFocus
+                />
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Número actual: <span className="font-semibold text-gray-700">{ventaToEdit.numero_guia || 'Sin número'}</span>
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start space-x-2">
+                <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-white text-xs font-bold">i</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-blue-800 font-medium mb-1">
+                    Información Importante
+                  </p>
+                  <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                    <li>El número de guía se actualizará en el sistema</li>
+                    <li>Podrá regenerar la boleta con el número correcto</li>
+                    <li>El cambio quedará registrado en el historial</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditGuiaModal(false);
+                  setVentaToEdit(null);
+                  setNewNumeroGuia('');
+                }}
+                disabled={isUpdatingGuia}
+                className="flex-1 px-4 py-3 text-sm font-bold text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleUpdateGuia}
+                disabled={isUpdatingGuia || !newNumeroGuia.trim()}
+                className="flex-1 px-4 py-3 text-sm font-bold text-white bg-orange-600 rounded-lg hover:bg-orange-700 active:scale-95 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-orange-600/30"
+              >
+                {isUpdatingGuia ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Actualizando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-5 w-5" />
+                    Actualizar Guía
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
       </Modal>
