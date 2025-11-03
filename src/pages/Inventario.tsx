@@ -403,6 +403,10 @@ const Inventario: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
@@ -498,7 +502,11 @@ const Inventario: React.FC = () => {
           />
           
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              if (fileInputRef.current) {
+                fileInputRef.current.click();
+              }
+            }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
           >
             <Upload size={16} />
@@ -605,7 +613,7 @@ const Inventario: React.FC = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad de Madejas</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock En Conos</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
               </tr>
@@ -1106,7 +1114,7 @@ const Inventario: React.FC = () => {
               onChange={(e) => setFormData({ ...formData, estado: e.target.value as 'Por Hilandar' | 'Conos Devanados' | 'Conos Veteados' })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="Por Hilandar">Por Hilandar</option>
+              <option value="Por Devanar">Por Devanar</option>
               <option value="Conos Devanados">Conos Devanados</option>
               <option value="Conos Veteados">Conos Veteados</option>
             </select>

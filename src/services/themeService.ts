@@ -162,34 +162,51 @@ export const themeService = {
   },
 
   applyTheme(theme: Theme): void {
-    const root = document.documentElement;
+    if (typeof document === 'undefined') return;
 
-    if (theme.mode === 'dark') {
-      root.classList.add('dark');
-      document.body.classList.add('dark');
-      document.body.style.backgroundColor = '#111827';
-      document.body.style.color = '#f3f4f6';
-    } else {
-      root.classList.remove('dark');
-      document.body.classList.remove('dark');
-      document.body.style.backgroundColor = '#f9fafb';
-      document.body.style.color = '#111827';
+    try {
+      const root = document.documentElement;
+      const body = document.body;
+
+      if (!root || !body) return;
+
+      if (theme.mode === 'dark') {
+        if (root.classList) root.classList.add('dark');
+        if (body.classList) body.classList.add('dark');
+        if (body.style) {
+          body.style.backgroundColor = '#111827';
+          body.style.color = '#f3f4f6';
+        }
+      } else {
+        if (root.classList) root.classList.remove('dark');
+        if (body.classList) body.classList.remove('dark');
+        if (body.style) {
+          body.style.backgroundColor = '#f9fafb';
+          body.style.color = '#111827';
+        }
+      }
+
+      if (root.setAttribute) {
+        root.setAttribute('data-theme-color', theme.color);
+        root.setAttribute('data-theme-mode', theme.mode);
+      }
+
+      const colorMap: Record<ThemeColor, { light: string; dark: string }> = {
+        blue: { light: '#2563eb', dark: '#3b82f6' },
+        green: { light: '#16a34a', dark: '#22c55e' },
+        red: { light: '#dc2626', dark: '#ef4444' },
+        orange: { light: '#ea580c', dark: '#f97316' },
+        teal: { light: '#0d9488', dark: '#14b8a6' },
+        cyan: { light: '#0891b2', dark: '#06b6d4' },
+      };
+
+      const primaryColor = theme.mode === 'dark' ? colorMap[theme.color].dark : colorMap[theme.color].light;
+      if (root.style && root.style.setProperty) {
+        root.style.setProperty('--primary-color', primaryColor);
+      }
+    } catch (error) {
+      console.warn('Error applying theme:', error);
     }
-
-    root.setAttribute('data-theme-color', theme.color);
-    root.setAttribute('data-theme-mode', theme.mode);
-
-    const colorMap: Record<ThemeColor, { light: string; dark: string }> = {
-      blue: { light: '#2563eb', dark: '#3b82f6' },
-      green: { light: '#16a34a', dark: '#22c55e' },
-      red: { light: '#dc2626', dark: '#ef4444' },
-      orange: { light: '#ea580c', dark: '#f97316' },
-      teal: { light: '#0d9488', dark: '#14b8a6' },
-      cyan: { light: '#0891b2', dark: '#06b6d4' },
-    };
-
-    const primaryColor = theme.mode === 'dark' ? colorMap[theme.color].dark : colorMap[theme.color].light;
-    root.style.setProperty('--primary-color', primaryColor);
   },
 
   getColorScheme(color: ThemeColor, mode: ThemeMode) {

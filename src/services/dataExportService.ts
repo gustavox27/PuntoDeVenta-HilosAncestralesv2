@@ -111,6 +111,10 @@ export const dataExportService = {
   },
 
   async downloadBackup(): Promise<void> {
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      throw new Error('Este método solo puede ejecutarse en un navegador');
+    }
+
     try {
       const backupData = await this.exportAllData();
       const fileName = `backup-${APP_NAME}-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.json`;
@@ -118,12 +122,31 @@ export const dataExportService = {
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
+
+      if (!link) {
+        throw new Error('No se pudo crear el elemento de descarga');
+      }
+
       link.href = url;
       link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      link.style.display = 'none';
+
+      const body = document.body;
+      if (!body) {
+        URL.revokeObjectURL(url);
+        throw new Error('No se pudo acceder al body del documento');
+      }
+
+      body.appendChild(link);
+
+      try {
+        link.click();
+      } finally {
+        if (link.parentNode === body) {
+          body.removeChild(link);
+        }
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
       console.error('Error downloading backup:', error);
       throw new Error('No se pudo descargar el backup');

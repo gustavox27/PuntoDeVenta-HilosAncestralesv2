@@ -24,8 +24,8 @@ import Modal from '../components/Common/Modal';
 import DeleteConfirmationModal from '../components/Common/DeleteConfirmationModal';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 
-const APP_VERSION = '1.0.0';
-const SCHEMA_VERSION = '1.0.0';
+const APP_VERSION = '5.4.0';
+const SCHEMA_VERSION = '2.0.0';
 
 export default function Configuracion() {
   const [stats, setStats] = useState<TableStats[]>([]);

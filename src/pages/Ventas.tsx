@@ -394,10 +394,44 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
         const anticiposPrevios = await SupabaseService.getAnticiposPorCliente(usuarioSeleccionado.id);
         const anticiposSinVenta = anticiposPrevios.filter(a => !a.venta_id);
 
+        let montoRestanteAPagar = total;
+        if (anticipoData) {
+          montoRestanteAPagar = Math.max(0, total - anticipoData.monto);
+        }
+
+        let montoAplicado = 0;
+
         for (const anticipo of anticiposSinVenta) {
-          await SupabaseService.updateAnticipo(anticipo.id, {
-            venta_id: ventaCreada.id
-          });
+          if (montoAplicado >= montoRestanteAPagar) {
+            break;
+          }
+
+          const montoNecesario = montoRestanteAPagar - montoAplicado;
+
+          if (anticipo.monto <= montoNecesario) {
+            await SupabaseService.updateAnticipo(anticipo.id, {
+              venta_id: ventaCreada.id
+            });
+            montoAplicado += anticipo.monto;
+          } else {
+            const montoUsado = montoNecesario;
+            const montoSobrante = anticipo.monto - montoUsado;
+
+            await SupabaseService.updateAnticipo(anticipo.id, {
+              venta_id: ventaCreada.id,
+              monto: montoUsado
+            });
+
+            await SupabaseService.createAnticipo({
+              cliente_id: usuarioSeleccionado.id,
+              monto: montoSobrante,
+              metodo_pago: anticipo.metodo_pago,
+              fecha_anticipo: anticipo.fecha_anticipo,
+              observaciones: `Saldo remanente de anticipo original (${anticipo.id.substring(0, 8)})`
+            });
+
+            montoAplicado += montoUsado;
+          }
         }
       }
 
