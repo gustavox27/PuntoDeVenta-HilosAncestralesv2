@@ -314,7 +314,16 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-900">
                           <div className="max-w-xs truncate">
-                            {venta.detalles?.map(d => d.producto?.nombre).join(', ') || 'N/A'}
+                            {venta.detalles?.map((d, idx) => {
+                              const nombre = d.producto_eliminado ? (
+                                <span key={idx} className="text-red-600 font-semibold" title={`Producto eliminado - ${d.producto_eliminado_color || ''}`}>
+                                  {d.producto_eliminado_nombre || 'Producto Eliminado'}
+                                </span>
+                              ) : (
+                                <span key={idx}>{d.producto?.nombre || 'N/A'}</span>
+                              );
+                              return idx === 0 ? nombre : <>, {nombre}</>;
+                            }) || 'N/A'}
                           </div>
                           <div className="text-xs text-gray-500">
                             {venta.detalles?.reduce((sum, d) => sum + d.cantidad, 0) || 0} unidades
@@ -426,8 +435,21 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
                       <tr key={index}>
                         <td className="px-4 py-2 text-sm text-gray-900">
                           <div>
-                            <p className="font-medium">{detalle.producto?.nombre || 'N/A'}</p>
-                            <p className="text-xs text-gray-500">{detalle.producto?.color}</p>
+                            {detalle.producto_eliminado ? (
+                              <>
+                                <p className="font-medium text-red-600" title={`Producto eliminado - ${detalle.producto_eliminado_color || ''}`}>
+                                  {detalle.producto_eliminado_nombre || 'Producto Eliminado'}
+                                </p>
+                                {detalle.producto_eliminado_color && (
+                                  <p className="text-xs text-red-500">{detalle.producto_eliminado_color}</p>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <p className="font-medium">{detalle.producto?.nombre || 'N/A'}</p>
+                                <p className="text-xs text-gray-500">{detalle.producto?.color}</p>
+                              </>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-2 text-sm text-gray-900">{detalle.cantidad}</td>

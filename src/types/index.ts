@@ -36,6 +36,8 @@ export interface Venta {
   descuento_total?: number;
   estado_pago?: 'completo' | 'pendiente';
   completada?: boolean;
+  usuario_eliminado_nombre?: string;
+  usuario_eliminado?: boolean;
   created_at?: string;
   usuario?: Usuario;
   detalles?: VentaDetalle[];
@@ -50,6 +52,9 @@ export interface VentaDetalle {
   precio_unitario: number;
   subtotal: number;
   descuento?: number;
+  producto_eliminado_nombre?: string;
+  producto_eliminado_color?: string;
+  producto_eliminado?: boolean;
   created_at?: string;
   producto?: Producto;
 }

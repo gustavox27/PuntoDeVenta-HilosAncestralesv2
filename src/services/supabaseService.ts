@@ -118,12 +118,13 @@ export class SupabaseService {
         .eq('id_usuario', id);
     }
 
-    const { error } = await supabase
+    // El trigger marcar_ventas_usuario_eliminado se encargará de marcar las ventas automáticamente
+    const { error: deleteError } = await supabase
       .from('usuarios')
       .delete()
       .eq('id', id);
 
-    if (error) throw error;
+    if (deleteError) throw deleteError;
 
     await this.createEvento({
       tipo: 'Usuario',
@@ -229,6 +230,21 @@ export class SupabaseService {
     });
 
     return data;
+  }
+
+  static async getProductDataSummary(productId: string) {
+    const { data: ventasDetalle } = await supabase
+      .from('ventas_detalle')
+      .select('cantidad')
+      .eq('id_producto', productId);
+
+    const ventas = ventasDetalle?.length || 0;
+    const totalVendido = ventasDetalle?.reduce((sum, d) => sum + d.cantidad, 0) || 0;
+
+    return {
+      ventas,
+      totalVendido
+    };
   }
 
   static async deleteProducto(id: string) {

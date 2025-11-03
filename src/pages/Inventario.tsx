@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Package, Plus, Download, Upload, CreditCard as Edit, Trash2, Search, BarChart3, AlertTriangle, Eye } from 'lucide-react';
 import ColorManager from '../components/Inventario/ColorManager';
+import DeleteProductModal from '../components/Inventario/DeleteProductModal';
 import { SupabaseService } from '../services/supabaseService';
 import { ExportUtils } from '../utils/exportUtils';
 import { Producto } from '../types';
@@ -26,6 +27,8 @@ const Inventario: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
   const [productToDelete, setProductToDelete] = useState<Producto | null>(null);
+  const [productDataSummary, setProductDataSummary] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [porHilandarProducts, setPorHilandarProducts] = useState<Producto[]>([]);
   const [showColorModal, setShowColorModal] = useState(false);
   const [showProductDetailModal, setShowProductDetailModal] = useState(false);
@@ -322,23 +325,34 @@ const Inventario: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleDeleteClick = (producto: Producto) => {
-    setProductToDelete(producto);
-    setShowDeleteModal(true);
+  const handleDeleteClick = async (producto: Producto) => {
+    try {
+      const summary = await SupabaseService.getProductDataSummary(producto.id);
+      setProductDataSummary(summary);
+      setProductToDelete(producto);
+      setShowDeleteModal(true);
+    } catch (error) {
+      console.error('Error getting product data summary:', error);
+      toast.error('Error al obtener información del producto');
+    }
   };
 
   const handleConfirmDelete = async () => {
     if (!productToDelete) return;
 
     try {
+      setIsDeleting(true);
       await SupabaseService.deleteProducto(productToDelete.id);
       toast.success('Producto eliminado correctamente');
-      loadProductos();
+      await loadProductos();
       setShowDeleteModal(false);
       setProductToDelete(null);
+      setProductDataSummary(null);
     } catch (error) {
       console.error('Error deleting product:', error);
       toast.error('Error al eliminar producto');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1027,42 +1041,18 @@ const Inventario: React.FC = () => {
         </div>
       </Modal>
 
-      {/* Modal de Confirmación de Eliminación */}
-      <Modal
+      <DeleteProductModal
         isOpen={showDeleteModal}
         onClose={() => {
           setShowDeleteModal(false);
           setProductToDelete(null);
+          setProductDataSummary(null);
         }}
-        title="Confirmar Eliminación"
-        size="md"
-      >
-        <div className="text-center py-4">
-          <AlertTriangle className="mx-auto h-12 w-12 text-red-600 mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">¿Está seguro?</h3>
-          <p className="text-gray-600 mb-6">
-            Esta acción eliminará permanentemente el producto "{productToDelete?.nombre}" y no se puede deshacer.
-          </p>
-          
-          <div className="flex justify-center space-x-4">
-            <button
-              onClick={() => {
-                setShowDeleteModal(false);
-                setProductToDelete(null);
-              }}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleConfirmDelete}
-              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Eliminar
-            </button>
-          </div>
-        </div>
-      </Modal>
+        onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
+        productName={productToDelete?.nombre || ''}
+        productDataSummary={productDataSummary}
+      />
 
       {/* Modal de Producto */}
       <Modal
