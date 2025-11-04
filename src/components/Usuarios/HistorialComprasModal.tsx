@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Calendar, DollarSign, Package, X, Eye, Download, Filter, Clock, CreditCard, FileText } from 'lucide-react';
+import { ShoppingBag, Calendar, DollarSign, Package, X, Eye, Download, Filter, Clock, CreditCard, FileText, Edit2, Save } from 'lucide-react';
 import { SupabaseService } from '../../services/supabaseService';
 import { ExportUtils } from '../../utils/exportUtils';
 import { Venta } from '../../types';
@@ -30,6 +30,15 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
   const [anticipoInicial, setAnticipoInicial] = useState<number>(0);
   const [anticiposIniciales, setAnticiposIniciales] = useState<any[]>([]);
   const [showAnticiposModal, setShowAnticiposModal] = useState(false);
+  const [showEditAnticipoModal, setShowEditAnticipoModal] = useState(false);
+  const [editingAnticipo, setEditingAnticipo] = useState<any>(null);
+  const [editFormData, setEditFormData] = useState({
+    monto: '',
+    metodo_pago: '',
+    fecha_anticipo: '',
+    observaciones: ''
+  });
+  const [isUpdatingAnticipo, setIsUpdatingAnticipo] = useState(false);
 
   useEffect(() => {
     if (isOpen && usuarioId) {
@@ -87,6 +96,50 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
       setAnticipoInicial(totalDisponible);
     } catch (error) {
       console.error('Error loading anticipo inicial:', error);
+    }
+  };
+
+  const handleEditAnticipo = (anticipo: any) => {
+    setEditingAnticipo(anticipo);
+    setEditFormData({
+      monto: anticipo.monto.toString(),
+      metodo_pago: anticipo.metodo_pago,
+      fecha_anticipo: anticipo.fecha_anticipo.split('T')[0],
+      observaciones: anticipo.observaciones || ''
+    });
+    setShowEditAnticipoModal(true);
+  };
+
+  const handleUpdateAnticipo = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!editingAnticipo) return;
+
+    const montoNum = parseFloat(editFormData.monto);
+    if (isNaN(montoNum) || montoNum <= 0) {
+      toast.error('El monto debe ser mayor a 0');
+      return;
+    }
+
+    try {
+      setIsUpdatingAnticipo(true);
+
+      await SupabaseService.updateAnticipo(editingAnticipo.id, {
+        monto: montoNum,
+        metodo_pago: editFormData.metodo_pago,
+        fecha_anticipo: editFormData.fecha_anticipo,
+        observaciones: editFormData.observaciones || undefined
+      });
+
+      await loadAnticipoInicial();
+      setShowEditAnticipoModal(false);
+      setEditingAnticipo(null);
+      toast.success('Anticipo actualizado correctamente');
+    } catch (error) {
+      console.error('Error updating anticipo:', error);
+      toast.error('Error al actualizar el anticipo');
+    } finally {
+      setIsUpdatingAnticipo(false);
     }
   };
 
@@ -550,13 +603,23 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-emerald-600">
-                        S/ {anticipo.monto.toFixed(2)}
-                      </p>
-                      <span className="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        Disponible
-                      </span>
+                    <div className="flex flex-col items-end space-y-2">
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-emerald-600">
+                          S/ {anticipo.monto.toFixed(2)}
+                        </p>
+                        <span className="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          Disponible
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleEditAnticipo(anticipo)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-medium flex items-center space-x-1.5 transition-colors shadow-sm"
+                        title="Editar anticipo"
+                      >
+                        <Edit2 size={12} />
+                        <span>Editar</span>
+                      </button>
                     </div>
                   </div>
 
@@ -619,6 +682,156 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={showEditAnticipoModal}
+        onClose={() => {
+          setShowEditAnticipoModal(false);
+          setEditingAnticipo(null);
+        }}
+        title="Editar Anticipo Inicial"
+        size="md"
+      >
+        {editingAnticipo && (
+          <form onSubmit={handleUpdateAnticipo} className="space-y-5">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+              <div className="flex items-start space-x-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Edit2 className="h-5 w-5 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-gray-900 mb-1">Corrección de Anticipo</h4>
+                  <p className="text-xs text-gray-600">
+                    Actualiza la información del anticipo en caso de error humano
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    ID: {editingAnticipo.id.substring(0, 8)}...
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <DollarSign className="mr-1 h-4 w-4" />
+                Monto del Anticipo
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
+                  S/
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={editFormData.monto}
+                  onChange={(e) => setEditFormData({ ...editFormData, monto: e.target.value })}
+                  disabled={isUpdatingAnticipo}
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <Calendar className="mr-1 h-4 w-4" />
+                Fecha del Anticipo
+              </label>
+              <input
+                type="date"
+                value={editFormData.fecha_anticipo}
+                onChange={(e) => setEditFormData({ ...editFormData, fecha_anticipo: e.target.value })}
+                disabled={isUpdatingAnticipo}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <CreditCard className="mr-1 h-4 w-4" />
+                Método de Pago
+              </label>
+              <select
+                value={editFormData.metodo_pago}
+                onChange={(e) => setEditFormData({ ...editFormData, metodo_pago: e.target.value })}
+                disabled={isUpdatingAnticipo}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed capitalize"
+              >
+                <option value="efectivo">Efectivo</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="tarjeta">Tarjeta</option>
+                <option value="yape">Yape</option>
+                <option value="plin">Plin</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                <FileText className="mr-1 h-4 w-4" />
+                Observaciones
+              </label>
+              <textarea
+                value={editFormData.observaciones}
+                onChange={(e) => setEditFormData({ ...editFormData, observaciones: e.target.value })}
+                disabled={isUpdatingAnticipo}
+                rows={3}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                placeholder="Razón de la corrección (opcional)"
+              />
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <div className="flex items-start space-x-2">
+                <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-white text-xs font-bold">!</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-yellow-800 font-medium">
+                    Esta acción actualizará el registro del anticipo
+                  </p>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    Los cambios se reflejarán inmediatamente en el sistema
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditAnticipoModal(false);
+                  setEditingAnticipo(null);
+                }}
+                disabled={isUpdatingAnticipo}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingAnticipo}
+                className="flex-1 px-4 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 active:scale-95 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30"
+              >
+                {isUpdatingAnticipo ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-5 w-5" />
+                    Guardar Cambios
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
     </>
   );

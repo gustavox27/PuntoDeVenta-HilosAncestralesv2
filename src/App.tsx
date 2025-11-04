@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import { Usuario } from './types';
 import { UserProvider } from './contexts/UserContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { SupabaseService } from './services/supabaseService';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -25,6 +26,7 @@ function App() {
         const user = JSON.parse(storedUser);
         setCurrentUser(user);
         setIsAuthenticated(true);
+        SupabaseService.setCurrentUser(user.nombre);
       } catch (error) {
         console.error('Error parsing stored user:', error);
         localStorage.removeItem('currentUser');
@@ -36,6 +38,7 @@ function App() {
     setCurrentUser(usuario);
     setIsAuthenticated(true);
     localStorage.setItem('currentUser', JSON.stringify(usuario));
+    SupabaseService.setCurrentUser(usuario.nombre);
   };
 
   const handleLogout = () => {
@@ -43,6 +46,7 @@ function App() {
     setIsAuthenticated(false);
     localStorage.removeItem('currentUser');
     setCurrentPage('dashboard');
+    SupabaseService.setCurrentUser(null);
   };
 
   if (!isAuthenticated) {

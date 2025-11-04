@@ -2,6 +2,11 @@ import { supabase } from '../lib/supabase';
 import { Usuario, Producto, Venta, VentaDetalle, Evento, Anticipo } from '../types';
 
 export class SupabaseService {
+  private static currentUser: string | null = null;
+
+  static setCurrentUser(userName: string | null) {
+    this.currentUser = userName;
+  }
   // USUARIOS
   static async getUsuarios() {
     const { data, error } = await supabase
@@ -27,6 +32,7 @@ export class SupabaseService {
       descripcion: `Usuario creado: ${usuario.nombre} (DNI: ${usuario.dni})`,
       modulo: 'Usuarios',
       accion: 'Crear',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: data.id,
       entidad_tipo: 'usuario'
     });
@@ -49,6 +55,7 @@ export class SupabaseService {
       descripcion: `Usuario actualizado: ${data.nombre}`,
       modulo: 'Usuarios',
       accion: 'Actualizar',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'usuario'
     });
@@ -131,6 +138,7 @@ export class SupabaseService {
       descripcion: `Usuario eliminado: ${usuario?.nombre || 'Desconocido'}${deleteRelatedData ? ' (con datos relacionados)' : ''}`,
       modulo: 'Usuarios',
       accion: 'Eliminar',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'usuario'
     });
@@ -184,6 +192,7 @@ export class SupabaseService {
       descripcion: `Producto creado: ${producto.nombre} - ${producto.color} (Stock: ${producto.stock})`,
       modulo: 'Inventario',
       accion: 'Crear',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: data.id,
       entidad_tipo: 'producto'
     });
@@ -204,6 +213,7 @@ export class SupabaseService {
       descripcion: `${productos.length} productos creados en lote`,
       modulo: 'Inventario',
       accion: 'Crear Lote',
+      usuario: this.currentUser || 'Sistema',
       entidad_tipo: 'producto'
     });
 
@@ -225,6 +235,7 @@ export class SupabaseService {
       descripcion: `Producto actualizado: ${data.nombre} - ${data.color}`,
       modulo: 'Inventario',
       accion: 'Actualizar',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'producto'
     });
@@ -266,6 +277,7 @@ export class SupabaseService {
       descripcion: `Producto eliminado: ${producto?.nombre || 'Desconocido'} - ${producto?.color || ''}`,
       modulo: 'Inventario',
       accion: 'Eliminar',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'producto'
     });
@@ -286,6 +298,7 @@ export class SupabaseService {
       descripcion: `Stock actualizado: ${data.nombre} - Nuevo stock: ${nuevoStock}`,
       modulo: 'Inventario',
       accion: 'Actualizar Stock',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'producto'
     });
@@ -375,7 +388,7 @@ export class SupabaseService {
         descripcion: `Nueva venta realizada por un total de S/ ${venta.total}`,
         modulo: 'Ventas',
         accion: 'Crear',
-        usuario: venta.vendedor,
+        usuario: this.currentUser || venta.vendedor,
         entidad_id: ventaData.id,
         entidad_tipo: 'venta'
       });
@@ -401,6 +414,7 @@ export class SupabaseService {
       descripcion: `Venta actualizada: ${updates.numero_guia ? `N° de Guía: ${updates.numero_guia}` : 'Información actualizada'}`,
       modulo: 'Historial',
       accion: 'Actualizar',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'venta'
     });
@@ -478,6 +492,7 @@ export class SupabaseService {
       descripcion: `Anticipo registrado: S/ ${anticipo.monto} - Método: ${anticipo.metodo_pago}`,
       modulo: 'Ventas',
       accion: 'Crear',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: data.id,
       entidad_tipo: 'anticipo'
     });
@@ -500,6 +515,7 @@ export class SupabaseService {
       descripcion: `Anticipo actualizado: S/ ${data.monto}`,
       modulo: 'Ventas',
       accion: 'Actualizar',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'anticipo'
     });
@@ -526,6 +542,7 @@ export class SupabaseService {
       descripcion: `Anticipo eliminado: S/ ${anticipo?.monto || 0}`,
       modulo: 'Ventas',
       accion: 'Eliminar',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'anticipo'
     });
@@ -556,6 +573,7 @@ export class SupabaseService {
       descripcion: `Color creado: ${color.nombre}`,
       modulo: 'Inventario',
       accion: 'Crear',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: data.id,
       entidad_tipo: 'color'
     });
@@ -578,6 +596,7 @@ export class SupabaseService {
       descripcion: `Color actualizado: ${data.nombre}`,
       modulo: 'Inventario',
       accion: 'Actualizar',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'color'
     });
@@ -604,6 +623,7 @@ export class SupabaseService {
       descripcion: `Color eliminado: ${color?.nombre || 'Desconocido'}`,
       modulo: 'Inventario',
       accion: 'Eliminar',
+      usuario: this.currentUser || 'Sistema',
       entidad_id: id,
       entidad_tipo: 'color'
     });

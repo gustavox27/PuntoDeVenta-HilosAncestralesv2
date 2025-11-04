@@ -115,39 +115,47 @@ export const dataExportService = {
       throw new Error('Este método solo puede ejecutarse en un navegador');
     }
 
+    let link: HTMLAnchorElement | null = null;
+    let url: string | null = null;
+
     try {
       const backupData = await this.exportAllData();
       const fileName = `backup-${APP_NAME}-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.json`;
 
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-
-      if (!link) {
-        throw new Error('No se pudo crear el elemento de descarga');
-      }
+      url = URL.createObjectURL(blob);
+      link = document.createElement('a');
 
       link.href = url;
       link.download = fileName;
-      link.style.display = 'none';
+      link.style.position = 'fixed';
+      link.style.top = '-9999px';
+      link.style.left = '-9999px';
 
-      const body = document.body;
-      if (!body) {
-        URL.revokeObjectURL(url);
-        throw new Error('No se pudo acceder al body del documento');
-      }
+      document.body.appendChild(link);
 
-      body.appendChild(link);
+      setTimeout(() => {
+        if (link) {
+          link.click();
 
-      try {
-        link.click();
-      } finally {
-        if (link.parentNode === body) {
-          body.removeChild(link);
+          setTimeout(() => {
+            if (link && link.parentNode) {
+              link.parentNode.removeChild(link);
+            }
+            if (url) {
+              URL.revokeObjectURL(url);
+            }
+          }, 100);
         }
+      }, 0);
+
+    } catch (error) {
+      if (link && link.parentNode) {
+        link.parentNode.removeChild(link);
+      }
+      if (url) {
         URL.revokeObjectURL(url);
       }
-    } catch (error) {
       console.error('Error downloading backup:', error);
       throw new Error('No se pudo descargar el backup');
     }
