@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Package, Plus, Download, Upload, CreditCard as Edit, Trash2, Search, BarChart3, AlertTriangle, Eye } from 'lucide-react';
 import ColorManager from '../components/Inventario/ColorManager';
 import DeleteProductModal from '../components/Inventario/DeleteProductModal';
+import ProductDetailTabs from '../components/Inventario/ProductDetailTabs';
 import { SupabaseService } from '../services/supabaseService';
 import { ExportUtils } from '../utils/exportUtils';
 import { Producto } from '../types';
@@ -1198,102 +1199,11 @@ const Inventario: React.FC = () => {
           setShowProductDetailModal(false);
           setProductDetail(null);
         }}
-        title="Detalles del Producto"
-        size="md"
+        title={productDetail ? `${productDetail.nombre} - ${productDetail.color}` : 'Detalles del Producto'}
+        size="lg"
       >
         {productDetail && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Nombre</label>
-                <p className="text-gray-900 font-medium">{productDetail.nombre}</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Color</label>
-                <p className="text-gray-900 font-medium">{productDetail.color}</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
-                <span className={`inline-block px-2 py-1 text-xs rounded-full ${
-                  productDetail.estado === 'Por Hilandar' || productDetail.estado === 'Por Devanar'
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : productDetail.estado === 'Conos Devanados'
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-blue-100 text-blue-800'
-                }`}>
-                  {productDetail.estado}
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Cantidad</label>
-                <p className="text-gray-900 font-medium">{productDetail.cantidad || 'N/A'}</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Precio Base</label>
-                <p className="text-gray-900 font-medium">
-                  {(productDetail.estado === 'Por Hilandar' || productDetail.estado === 'Por Devanar')
-                    ? 'En proceso...'
-                    : `S/ ${productDetail.precio_base.toFixed(2)}`}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Precio Unitario</label>
-                <p className="text-gray-900 font-medium">
-                  {(productDetail.estado === 'Por Hilandar' || productDetail.estado === 'Por Devanar')
-                    ? 'En proceso...'
-                    : `S/ ${productDetail.precio_uni.toFixed(2)}`}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Stock</label>
-                <p className="text-gray-900 font-medium">
-                  {(productDetail.estado === 'Por Hilandar' || productDetail.estado === 'Por Devanar')
-                    ? 'En proceso...'
-                    : productDetail.stock}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Fecha de Registro</label>
-                <p className="text-gray-900 font-medium">
-                  {productDetail.fecha_registro
-                    ? new Date(productDetail.fecha_registro).toLocaleString('es-ES', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
-                    : 'N/A'}
-                </p>
-              </div>
-            </div>
-
-            {productDetail.descripcion && (
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Descripción</label>
-                <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">{productDetail.descripcion}</p>
-              </div>
-            )}
-
-            <div className="flex justify-end pt-4 border-t">
-              <button
-                onClick={() => {
-                  setShowProductDetailModal(false);
-                  setProductDetail(null);
-                }}
-                className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
+          <ProductDetailTabs product={productDetail} />
         )}
       </Modal>
 

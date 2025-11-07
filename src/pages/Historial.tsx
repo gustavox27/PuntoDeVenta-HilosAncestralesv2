@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { History, Download, Search, Calendar, Eye, DollarSign, CheckCircle, Clock, Edit2, Save, X } from 'lucide-react';
+import { History, Download, Search, Calendar, Eye, DollarSign, CheckCircle, Clock, Edit2, Save, X, Trash2 } from 'lucide-react';
 import { SupabaseService } from '../services/supabaseService';
 import { ExportUtils } from '../utils/exportUtils';
 import { Venta } from '../types';
@@ -7,6 +7,7 @@ import LoadingSpinner from '../components/Common/LoadingSpinner';
 import Modal from '../components/Common/Modal';
 import TabsContainer from '../components/Historial/TabsContainer';
 import AnticipoManager from '../components/Historial/AnticipoManager';
+import DeleteVentaModal from '../components/Historial/DeleteVentaModal';
 import toast from 'react-hot-toast';
 
 const Historial: React.FC = () => {
@@ -26,6 +27,8 @@ const Historial: React.FC = () => {
   const [ventaToEdit, setVentaToEdit] = useState<Venta | null>(null);
   const [newNumeroGuia, setNewNumeroGuia] = useState('');
   const [isUpdatingGuia, setIsUpdatingGuia] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [ventaToDelete, setVentaToDelete] = useState<Venta | null>(null);
 
   useEffect(() => {
     loadVentas();
@@ -72,7 +75,8 @@ const Historial: React.FC = () => {
       filtered = filtered.filter(venta =>
         venta.usuario?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
         venta.usuario?.dni.includes(searchTerm) ||
-        venta.vendedor.toLowerCase().includes(searchTerm.toLowerCase())
+        venta.vendedor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (venta.numero_guia && venta.numero_guia.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -179,6 +183,15 @@ const Historial: React.FC = () => {
     setShowDetailModal(false);
     await loadVentas();
     toast.success('Venta actualizada');
+  };
+
+  const handleDeleteVenta = (venta: Venta) => {
+    setVentaToDelete(venta);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDeleteVenta = async () => {
+    await loadVentas();
   };
 
   const handleEditGuia = (venta: Venta) => {
@@ -295,7 +308,7 @@ const Historial: React.FC = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
             <input
               type="text"
-              placeholder="Buscar por cliente o vendedor..."
+              placeholder="Buscar por cliente, vendedor o N° de guía..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -451,6 +464,13 @@ const Historial: React.FC = () => {
                         title="Descargar boleta"
                       >
                         <Download size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteVenta(venta)}
+                        className="text-red-600 hover:text-red-900 flex items-center space-x-1"
+                        title="Eliminar venta"
+                      >
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </td>
@@ -783,6 +803,16 @@ const Historial: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      <DeleteVentaModal
+        isOpen={showDeleteModal}
+        venta={ventaToDelete}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setVentaToDelete(null);
+        }}
+        onConfirm={handleConfirmDeleteVenta}
+      />
     </div>
   );
 };

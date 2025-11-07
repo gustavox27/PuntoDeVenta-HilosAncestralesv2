@@ -258,6 +258,34 @@ export class SupabaseService {
     };
   }
 
+  static async getVentasPorProducto(productId: string) {
+    const { data, error } = await supabase
+      .from('ventas_detalle')
+      .select(`
+        id,
+        cantidad,
+        precio_unitario,
+        subtotal,
+        venta:ventas(
+          id,
+          fecha_venta,
+          numero_guia,
+          vendedor,
+          usuario:usuarios(
+            id,
+            nombre
+          ),
+          usuario_eliminado,
+          usuario_eliminado_nombre
+        )
+      `)
+      .eq('id_producto', productId)
+      .order('venta(fecha_venta)', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }
+
   static async deleteProducto(id: string) {
     const { data: producto } = await supabase
       .from('productos')
@@ -419,6 +447,71 @@ export class SupabaseService {
       entidad_tipo: 'venta'
     });
 
+    return data;
+  }
+
+  static async deleteVentaWithRollback(ventaId: string) {
+    try {
+      const { data, error } = await supabase
+        .rpc('eliminar_venta_con_rollback', {
+          p_venta_id: ventaId,
+          p_usuario_actual: this.currentUser || 'Sistema'
+        });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getVentaDetailsForDelete(ventaId: string) {
+    const { data, error } = await supabase
+      .from('ventas')
+      .select(`
+        id,
+        id_usuario,
+        fecha_venta,
+        total,
+        descuento_total,
+        anticipo_total,
+        saldo_pendiente,
+        numero_guia,
+        vendedor,
+        usuario:usuarios(
+          id,
+          nombre,
+          dni
+        ),
+        detalles:ventas_detalle(
+          id,
+          cantidad,
+          precio_unitario,
+          subtotal,
+          producto:productos(
+            id,
+            nombre,
+            color,
+            stock
+          )
+        ),
+        anticipos(
+          id,
+          monto,
+          metodo_pago,
+          fecha_anticipo,
+          observaciones
+        )
+      `)
+      .eq('id', ventaId)
+      .maybeSingle();
+
+    if (error) throw error;
     return data;
   }
 
