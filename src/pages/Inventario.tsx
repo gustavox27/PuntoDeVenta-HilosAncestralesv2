@@ -12,6 +12,7 @@ import MetricCard from '../components/Dashboard/MetricCard';
 import ChartCard from '../components/Dashboard/ChartCard';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { convertDateWithCurrentTime, getTodayDateString } from '../utils/dateUtils';
 
 const Inventario: React.FC = () => {
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -50,7 +51,7 @@ const Inventario: React.FC = () => {
     color: '',
     cantidad: '',
     descripcion: '',
-    fecha_registro: new Date().toISOString().split('T')[0]
+    fecha_registro: getTodayDateString()
   });
   
   const [hilanderiaData, setHilanderiaData] = useState({
@@ -154,7 +155,7 @@ const Inventario: React.FC = () => {
       color: '',
       cantidad: '',
       descripcion: '',
-      fecha_registro: new Date().toISOString().split('T')[0]
+      fecha_registro: getTodayDateString()
     });
     setHilanderiaData({
       estado: 'Conos Devanados',
@@ -169,8 +170,9 @@ const Inventario: React.FC = () => {
 
   const handleTintoreriaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
+      const fechaISO = convertDateWithCurrentTime(tintoreriaData.fecha_registro);
       const productoData = {
         nombre: tintoreriaData.nombre,
         color: tintoreriaData.color,
@@ -180,13 +182,13 @@ const Inventario: React.FC = () => {
         precio_uni: 0,
         stock: 0,
         cantidad: parseInt(tintoreriaData.cantidad),
-        fecha_ingreso: new Date(tintoreriaData.fecha_registro).toISOString(),
-        fecha_registro: new Date(tintoreriaData.fecha_registro).toISOString()
+        fecha_ingreso: fechaISO,
+        fecha_registro: fechaISO
       };
 
       await SupabaseService.createProducto(productoData);
       toast.success('Producto de tintorería creado correctamente');
-      
+
       loadProductos();
       setShowTintoreriaModal(false);
       resetForm();

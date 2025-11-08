@@ -179,23 +179,23 @@ const ProductDetailTabs: React.FC<ProductDetailTabsProps> = ({ product }) => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-fixed">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Fecha</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Cliente</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Cantidad</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Total</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">N° Guía</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Vendedor</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 w-24">Fecha</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 w-48">Cliente</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700 w-20">Cantidad</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700 w-24">Total</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 w-28">N° Guía</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 w-32">Vendedor</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {ventasHistorial.map((venta) => (
                     <tr key={venta.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <Calendar size={14} className="text-gray-400" />
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2 whitespace-nowrap overflow-hidden">
+                          <Calendar size={14} className="text-gray-400 flex-shrink-0" />
                           <span className="text-gray-900 font-medium">
                             {new Date(venta.venta.fecha_venta).toLocaleDateString('es-ES', {
                               day: '2-digit',
@@ -205,44 +205,44 @@ const ProductDetailTabs: React.FC<ProductDetailTabsProps> = ({ product }) => {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 break-words">
                         {venta.venta.usuario_eliminado ? (
-                          <div className="flex items-center space-x-1">
-                            <span className="text-red-600 font-semibold">
+                          <div className="flex items-start space-x-1 gap-1">
+                            <span className="text-red-600 font-semibold line-clamp-2 break-words">
                               {venta.venta.usuario_eliminado_nombre || 'Usuario Eliminado'}
                             </span>
-                            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">Eliminado</span>
+                            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">Eliminado</span>
                           </div>
                         ) : (
-                          <div className="flex items-center space-x-2">
-                            <User size={14} className="text-gray-400" />
-                            <span className="text-gray-900">
+                          <div className="flex items-start space-x-2 gap-1">
+                            <User size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />
+                            <span className="text-gray-900 line-clamp-2 break-words">
                               {venta.venta.usuario?.nombre || 'N/A'}
                             </span>
                           </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded font-medium">
+                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded font-medium whitespace-nowrap inline-block">
                           {venta.cantidad}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="text-gray-900 font-semibold">
+                        <span className="text-gray-900 font-semibold whitespace-nowrap">
                           S/ {venta.subtotal.toFixed(2)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 truncate">
                         {venta.venta.numero_guia ? (
-                          <span className="text-gray-900 font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                          <span className="text-gray-900 font-mono text-xs bg-gray-100 px-2 py-1 rounded truncate inline-block max-w-full">
                             {venta.venta.numero_guia}
                           </span>
                         ) : (
                           <span className="text-gray-400 text-sm">Sin guía</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="text-gray-700">{venta.venta.vendedor}</span>
+                      <td className="px-4 py-3 truncate">
+                        <span className="text-gray-700 truncate inline-block max-w-full">{venta.venta.vendedor}</span>
                       </td>
                     </tr>
                   ))}

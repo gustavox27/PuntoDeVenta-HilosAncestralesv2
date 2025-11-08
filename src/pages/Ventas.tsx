@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Plus, Minus, Trash2, User, Package, Receipt, Search, X, Filter, ShoppingBag, Eraser, DollarSign } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, User, Package, Receipt, Search, X, Filter, ShoppingBag, Eraser, DollarSign, Calendar, Edit2 } from 'lucide-react';
 import { SupabaseService } from '../services/supabaseService';
 import { ExportUtils } from '../utils/exportUtils';
 import { Usuario, Producto, CarritoItem } from '../types';
@@ -8,8 +8,10 @@ import Modal from '../components/Common/Modal';
 import AnticipoForm, { AnticipoData } from '../components/Ventas/AnticipoForm';
 import AnticipoInicialModal from '../components/Ventas/AnticipoInicialModal';
 import AnticipoConfirmModal from '../components/Ventas/AnticipoConfirmModal';
+import EditPriceModal from '../components/Ventas/EditPriceModal';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
+import { convertDateWithCurrentTime, getTodayDateString } from '../utils/dateUtils';
 
 interface VentasProps {
   currentUser: Usuario | null;
@@ -48,6 +50,9 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
   const [anticiposDisponibles, setAnticiposDisponibles] = useState<{ [key: string]: number }>({});
   const [showAnticipoConfirmModal, setShowAnticipoConfirmModal] = useState(false);
   const [clienteConAnticiposPrevios, setClienteConAnticiposPrevios] = useState<Usuario | null>(null);
+  const [fechaVenta, setFechaVenta] = useState<string>('');
+  const [showEditPriceModal, setShowEditPriceModal] = useState(false);
+  const [productoParaEditarPrecio, setProductoParaEditarPrecio] = useState<{ productoId: string; nombre: string; precioActual: number; precioBase: number } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -230,6 +235,10 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
     setShowProductModal(false);
     setSearchProduct('');
 
+    if (!fechaVenta) {
+      setFechaVenta(getTodayDateString());
+    }
+
     toast.success(`${carritoTemporal.length} producto(s) agregado(s) al carrito`);
   };
 
@@ -270,11 +279,19 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
     setAnticipoData(null);
     setDescuentoCarrito(0);
     setNumeroGuia('');
+    setFechaVenta('');
     toast.success('Carrito y cliente limpiados');
   };
 
+  const obtenerPrecioUnitario = (item: CarritoItem): number => {
+    return item.precioPersonalizado ?? item.producto.precio_uni;
+  };
+
   const calcularSubtotal = () => {
-    return carrito.reduce((total, item) => total + (item.producto.precio_uni * item.cantidad), 0);
+    return carrito.reduce((total, item) => {
+      const precio = obtenerPrecioUnitario(item);
+      return total + (precio * item.cantidad);
+    }, 0);
   };
 
   const calcularTotal = () => {
@@ -363,9 +380,11 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
         ventaCompletada = saldoPendiente === 0;
       }
 
+      const fechaVentaISO = fechaVenta ? convertDateWithCurrentTime(fechaVenta) : new Date().toISOString();
+
       const venta = {
         id_usuario: usuarioSeleccionado.id,
-        fecha_venta: new Date().toISOString(),
+        fecha_venta: fechaVentaISO,
         total,
         vendedor: currentUser?.nombre || 'Sistema',
         codigo_qr: codigoQR,
@@ -378,11 +397,12 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
       };
 
       const detalles = carrito.map(item => {
-        const subtotalProducto = item.producto.precio_uni * item.cantidad;
+        const precioUnitario = obtenerPrecioUnitario(item);
+        const subtotalProducto = precioUnitario * item.cantidad;
         return {
           id_producto: item.producto.id,
           cantidad: item.cantidad,
-          precio_unitario: item.producto.precio_uni,
+          precio_unitario: precioUnitario,
           subtotal: subtotalProducto,
           descuento: 0
         };
@@ -456,6 +476,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
       setAnticipoData(null);
       setDescuentoCarrito(0);
       setNumeroGuia('');
+      setFechaVenta('');
       setAnticiposDisponibles({});
 
       const productosActualizados = await SupabaseService.getProductosVendibles();
@@ -551,6 +572,33 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                 <span>Registrar Anticipo</span>
               </button>
             </div>
+
+            {carrito.length > 0 && (
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center">
+                  <Calendar className="mr-2 h-4 w-4 text-blue-600" />
+                  Fecha de Registro de Venta
+                </h3>
+                <input
+                  type="date"
+                  value={fechaVenta}
+                  onChange={(e) => {
+                    const selectedDate = e.target.value;
+                    const today = getTodayDateString();
+                    if (selectedDate <= today) {
+                      setFechaVenta(selectedDate);
+                    } else {
+                      toast.error('No puedes seleccionar una fecha futura');
+                    }
+                  }}
+                  max={getTodayDateString()}
+                  className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                />
+                <p className="text-xs text-gray-600 mt-2">
+                  Fecha por defecto: hoy. Puedes cambiarla a una fecha anterior si es necesario.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Carrito Principal */}
@@ -582,13 +630,17 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
               </div>
               
               <div className="space-y-3 max-h-64 overflow-y-auto mb-4">
-                {carrito.map(item => (
+                {carrito.map(item => {
+                  const precioUnitario = obtenerPrecioUnitario(item);
+                  const precioBase = item.producto.precio_base;
+                  const tieneDescuento = item.precioPersonalizado && item.precioPersonalizado > precioBase;
+
+                  return (
                   <div key={item.producto.id} className="bg-white p-4 rounded-lg border shadow-sm">
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex-1">
                         <p className="font-medium text-gray-900">{item.producto.nombre}</p>
                         <p className="text-sm text-gray-600">{item.producto.color}</p>
-                        <p className="text-sm text-blue-600 font-semibold">S/ {item.producto.precio_uni.toFixed(2)}</p>
                       </div>
                       <button
                         onClick={() => eliminarDelCarrito(item.producto.id)}
@@ -596,6 +648,29 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                       >
                         <Trash2 size={16} />
                       </button>
+                    </div>
+
+                    <div className="flex justify-between items-center mb-3">
+                      <button
+                        onClick={() => {
+                          setProductoParaEditarPrecio({
+                            productoId: item.producto.id,
+                            nombre: item.producto.nombre,
+                            precioActual: precioUnitario,
+                            precioBase: precioBase
+                          });
+                          setShowEditPriceModal(true);
+                        }}
+                        className="flex items-center space-x-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+                      >
+                        <Edit2 size={14} />
+                        <span>S/ {precioUnitario.toFixed(2)}</span>
+                      </button>
+                      {tieneDescuento && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                          Precio modificado
+                        </span>
+                      )}
                     </div>
                     
                     <div className="flex items-center justify-between">
@@ -625,11 +700,12 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                         </button>
                       </div>
                       <span className="text-lg font-bold text-gray-900">
-                        S/ {(item.producto.precio_uni * item.cantidad).toFixed(2)}
+                        S/ {(precioUnitario * item.cantidad).toFixed(2)}
                       </span>
                     </div>
                   </div>
-                ))}
+                );
+                })}
                 
                 {carrito.length === 0 && (
                   <div className="text-center text-gray-500 py-12">
@@ -1170,6 +1246,28 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
         clienteNombre={clienteConAnticiposPrevios?.nombre || ''}
         montoDisponible={clienteConAnticiposPrevios ? (anticiposDisponibles[clienteConAnticiposPrevios.id] || 0) : 0}
       />
+
+      {productoParaEditarPrecio && (
+        <EditPriceModal
+          isOpen={showEditPriceModal}
+          onClose={() => {
+            setShowEditPriceModal(false);
+            setProductoParaEditarPrecio(null);
+          }}
+          onConfirm={(newPrice) => {
+            setCarrito(carrito.map(item =>
+              item.producto.id === productoParaEditarPrecio.productoId
+                ? { ...item, precioPersonalizado: newPrice }
+                : item
+            ));
+            setShowEditPriceModal(false);
+            setProductoParaEditarPrecio(null);
+          }}
+          productName={productoParaEditarPrecio.nombre}
+          currentPrice={productoParaEditarPrecio.precioActual}
+          basePrice={productoParaEditarPrecio.precioBase}
+        />
+      )}
     </div>
   );
 };

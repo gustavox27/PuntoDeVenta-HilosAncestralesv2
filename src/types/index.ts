@@ -77,6 +77,7 @@ export interface Evento {
 export interface CarritoItem {
   producto: Producto;
   cantidad: number;
+  precioPersonalizado?: number;
 }
 
 export interface Anticipo {
