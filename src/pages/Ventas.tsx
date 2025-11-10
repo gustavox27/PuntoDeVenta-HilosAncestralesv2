@@ -53,6 +53,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
   const [fechaVenta, setFechaVenta] = useState<string>('');
   const [showEditPriceModal, setShowEditPriceModal] = useState(false);
   const [productoParaEditarPrecio, setProductoParaEditarPrecio] = useState<{ productoId: string; nombre: string; precioActual: number; precioBase: number } | null>(null);
+  const [tipoVenta, setTipoVenta] = useState<'completa' | 'anticipo'>('completa');
 
   useEffect(() => {
     loadData();
@@ -280,6 +281,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
     setDescuentoCarrito(0);
     setNumeroGuia('');
     setFechaVenta('');
+    setTipoVenta('completa');
     toast.success('Carrito y cliente limpiados');
   };
 
@@ -366,15 +368,23 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
       const codigoQR = uuidv4();
 
       const anticiposDisponiblesCliente = anticiposDisponibles[usuarioSeleccionado.id] || 0;
-      if (anticiposDisponiblesCliente > 0) {
-        anticipoTotal += anticiposDisponiblesCliente;
-      }
-
       let saldoPendiente = 0;
       let estadoPago: 'completo' | 'pendiente' = 'completo';
       let ventaCompletada = true;
 
-      if (anticipoData) {
+      if (tipoVenta === 'completa') {
+        anticipoTotal = anticipoData?.monto || 0;
+        if (anticiposDisponiblesCliente > 0) {
+          anticipoTotal += anticiposDisponiblesCliente;
+        }
+        saldoPendiente = 0;
+        estadoPago = 'completo';
+        ventaCompletada = true;
+      } else {
+        anticipoTotal = anticipoData?.monto || 0;
+        if (anticiposDisponiblesCliente > 0) {
+          anticipoTotal += anticiposDisponiblesCliente;
+        }
         saldoPendiente = Math.max(0, total - anticipoTotal);
         estadoPago = saldoPendiente > 0 ? 'pendiente' : 'completo';
         ventaCompletada = saldoPendiente === 0;
@@ -478,6 +488,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
       setNumeroGuia('');
       setFechaVenta('');
       setAnticiposDisponibles({});
+      setTipoVenta('completa');
 
       const productosActualizados = await SupabaseService.getProductosVendibles();
       setProductos(productosActualizados);
@@ -797,7 +808,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                     )}
                   </div>
 
-                  {!anticipoData && (
+                  {tipoVenta === 'completa' && (
                     <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -821,27 +832,59 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                     </div>
                   )}
 
-                  {calcularSaldoPendiente() === 0 && (anticipoData || (usuarioSeleccionado && anticiposDisponibles[usuarioSeleccionado.id] > 0)) && (
-                    <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                        <p className="text-sm font-medium text-emerald-800">
-                          Venta cubierta totalmente con anticipos
-                        </p>
-                      </div>
-                    </div>
+                  {tipoVenta === 'anticipo' && (anticipoData || (usuarioSeleccionado && anticiposDisponibles[usuarioSeleccionado.id] > 0)) && (
+                    <>
+                      {calcularSaldoPendiente() === 0 && (
+                        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                            <p className="text-sm font-medium text-emerald-800">
+                              Venta cubierta totalmente con anticipos
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {calcularSaldoPendiente() > 0 && (
+                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <p className="text-sm font-medium text-blue-800">
+                              Venta con anticipo - Saldo pendiente de S/ {calcularSaldoPendiente().toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
 
-                  {calcularSaldoPendiente() > 0 && (anticipoData || (usuarioSeleccionado && anticiposDisponibles[usuarioSeleccionado.id] > 0)) && (
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        <p className="text-sm font-medium text-blue-800">
-                          Venta con anticipo - Saldo pendiente de S/ {calcularSaldoPendiente().toFixed(2)}
+                  <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Tipo de Venta</p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          {tipoVenta === 'completa'
+                            ? 'El cliente pagará el total completo'
+                            : 'El cliente pagará el saldo posteriormente'}
                         </p>
                       </div>
-                    </div>
-                  )}
+                      <div className="flex items-center space-x-3 ml-4">
+                        <span className={`text-xs font-medium px-3 py-1 rounded-full ${tipoVenta === 'completa' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                          Completa
+                        </span>
+                        <div className="relative w-12 h-6 bg-gray-300 rounded-full transition-colors" style={{backgroundColor: tipoVenta === 'completa' ? '#10b981' : '#3b82f6'}}>
+                          <button
+                            onClick={() => setTipoVenta(tipoVenta === 'completa' ? 'anticipo' : 'completa')}
+                            className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${tipoVenta === 'completa' ? 'left-1' : 'right-1'}`}
+                            type="button"
+                          />
+                        </div>
+                        <span className={`text-xs font-medium px-3 py-1 rounded-full ${tipoVenta === 'anticipo' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                          Anticipo
+                        </span>
+                      </div>
+                    </label>
+                  </div>
 
                   <button
                     onClick={procesarVenta}

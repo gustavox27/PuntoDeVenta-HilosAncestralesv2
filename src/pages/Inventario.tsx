@@ -35,6 +35,8 @@ const Inventario: React.FC = () => {
   const [showColorModal, setShowColorModal] = useState(false);
   const [showProductDetailModal, setShowProductDetailModal] = useState(false);
   const [productDetail, setProductDetail] = useState<Producto | null>(null);
+  const [activeTab, setActiveTab] = useState<'tintoreria' | 'hilanderia'>('tintoreria');
+  const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     nombre: '',
     color: '',
@@ -91,7 +93,7 @@ const Inventario: React.FC = () => {
 
   useEffect(() => {
     filterProductos();
-  }, [productos, searchTerm]);
+  }, [productos, searchTerm, activeTab]);
   
   useEffect(() => {
     loadPorHilandarProducts();
@@ -125,17 +127,22 @@ const Inventario: React.FC = () => {
   };
 
   const filterProductos = () => {
-    if (!searchTerm) {
-      setFilteredProductos(productos);
-      return;
+    let filtered = productos;
+
+    if (activeTab === 'tintoreria') {
+      filtered = productos.filter(p => p.estado === 'Por Devanar');
+    } else {
+      filtered = productos.filter(p => p.estado === 'Conos Devanados' || p.estado === 'Conos Veteados');
     }
 
-    const filtered = productos.filter(producto =>
-      producto.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      producto.color.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      producto.estado.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    
+    if (searchTerm) {
+      filtered = filtered.filter(producto =>
+        producto.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        producto.color.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        producto.estado.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
     setFilteredProductos(filtered);
   };
 
@@ -186,12 +193,16 @@ const Inventario: React.FC = () => {
         fecha_registro: fechaISO
       };
 
-      await SupabaseService.createProducto(productoData);
+      const newProduct = await SupabaseService.createProducto(productoData);
       toast.success('Producto de tintorería creado correctamente');
 
       loadProductos();
       setShowTintoreriaModal(false);
       resetForm();
+
+      setActiveTab('tintoreria');
+      setHighlightedProductId(newProduct.id);
+      setTimeout(() => setHighlightedProductId(null), 3000);
     } catch (error) {
       console.error('Error saving tintorería product:', error);
       toast.error('Error al guardar producto de tintorería');
@@ -200,44 +211,29 @@ const Inventario: React.FC = () => {
 
   const handleHilanderiaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedProduct) return;
-    
+
     try {
       const cantidadProcesada = parseInt(hilanderiaData.cantidad);
       const cantidadOriginal = selectedProduct.cantidad || 0;
-      
-      // Validar que la cantidad procesada no sea mayor a la disponible
+
       if (cantidadProcesada > cantidadOriginal) {
         toast.error('La cantidad a procesar no puede ser mayor a la disponible');
         return;
       }
-      
+
       if (cantidadProcesada <= 0) {
         toast.error('La cantidad debe ser mayor a cero');
         return;
       }
-      
+
+      const fechaActual = new Date().toISOString();
+      let nuevoProductoId: string | null = null;
+
       if (cantidadProcesada === cantidadOriginal) {
-        // Actualizar el producto existente - cambiar nombre a "Cono" cuando se usa toda la cantidad
-        const updateData = {
-          nombre: 'Cono', // Cambiar automáticamente el nombre a "Cono"
-          estado: hilanderiaData.estado,
-          precio_base: parseFloat(hilanderiaData.precio_base),
-          precio_uni: parseFloat(hilanderiaData.precio_uni),
-          stock: parseInt(hilanderiaData.stock)
-        };
-        
-        await SupabaseService.updateProducto(selectedProduct.id, updateData);
-        toast.success('Producto procesado completamente y convertido a Cono');
-        
-        loadProductos();
-        setShowHilanderiaDetailModal(false);
-        resetForm();
-      } else if (cantidadProcesada < cantidadOriginal) {
-        // Crear nuevo producto y actualizar cantidad del original
         const nuevoProducto = {
-          nombre: 'Cono', // Cambiar automáticamente el nombre a "Cono"
+          nombre: 'Cono',
           color: selectedProduct.color,
           descripcion: selectedProduct.descripcion,
           estado: hilanderiaData.estado,
@@ -245,18 +241,51 @@ const Inventario: React.FC = () => {
           precio_uni: parseFloat(hilanderiaData.precio_uni),
           stock: parseInt(hilanderiaData.stock),
           cantidad: cantidadProcesada,
-          fecha_ingreso: new Date().toISOString()
+          fecha_ingreso: fechaActual,
+          fecha_registro: fechaActual
         };
-        
-        await SupabaseService.createProducto(nuevoProducto);
-        
-        // Actualizar cantidad del producto original
+
+        const newProduct = await SupabaseService.createProducto(nuevoProducto);
+        nuevoProductoId = newProduct.id;
+
+        await SupabaseService.updateProducto(selectedProduct.id, {
+          cantidad: 0
+        });
+
+        toast.success('Producto procesado completamente');
+      } else {
+        const nuevoProducto = {
+          nombre: 'Cono',
+          color: selectedProduct.color,
+          descripcion: selectedProduct.descripcion,
+          estado: hilanderiaData.estado,
+          precio_base: parseFloat(hilanderiaData.precio_base),
+          precio_uni: parseFloat(hilanderiaData.precio_uni),
+          stock: parseInt(hilanderiaData.stock),
+          cantidad: cantidadProcesada,
+          fecha_ingreso: fechaActual,
+          fecha_registro: fechaActual
+        };
+
+        const newProduct = await SupabaseService.createProducto(nuevoProducto);
+        nuevoProductoId = newProduct.id;
+
         await SupabaseService.updateProducto(selectedProduct.id, {
           cantidad: cantidadOriginal - cantidadProcesada
         });
-        
+
         toast.success('Conos creados correctamente. Cantidad restante actualizada.');
         setShowContinueModal(true);
+      }
+
+      loadProductos();
+      setShowHilanderiaDetailModal(false);
+      resetForm();
+
+      if (nuevoProductoId) {
+        setActiveTab('hilanderia');
+        setHighlightedProductId(nuevoProductoId);
+        setTimeout(() => setHighlightedProductId(null), 3000);
       }
     } catch (error) {
       console.error('Error processing hilandería:', error);
@@ -576,12 +605,52 @@ const Inventario: React.FC = () => {
         />
       </div>
 
-      {/* Tabla de productos */}
+      {/* Tabla de productos con pestañas */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        {/* Tabs */}
+        <div className="border-b border-gray-200">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab('tintoreria')}
+              className={`flex-1 px-6 py-4 text-center font-medium transition-all ${
+                activeTab === 'tintoreria'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'border-b-2 border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <div className="flex items-center justify-center space-x-2">
+                <Package size={18} />
+                <span>Tintorería</span>
+                <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-xs font-semibold">
+                  {productos.filter(p => p.estado === 'Por Devanar').length}
+                </span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('hilanderia')}
+              className={`flex-1 px-6 py-4 text-center font-medium transition-all ${
+                activeTab === 'hilanderia'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'border-b-2 border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <div className="flex items-center justify-center space-x-2">
+                <BarChart3 size={18} />
+                <span>Hilandería</span>
+                <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-xs font-semibold">
+                  {productos.filter(p => p.estado === 'Conos Devanados' || p.estado === 'Conos Veteados').length}
+                </span>
+              </div>
+            </button>
+          </div>
+        </div>
+
         <div className="p-6 border-b border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <h3 className="text-lg font-semibold text-gray-900">Lista de Productos</h3>
-            
+            <h3 className="text-lg font-semibold text-gray-900">
+              {activeTab === 'tintoreria' ? 'Productos en Tintorería' : 'Productos en Hilandería'}
+            </h3>
+
             <div className="flex items-center space-x-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
@@ -593,7 +662,7 @@ const Inventario: React.FC = () => {
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              
+
               <button
                 onClick={() => {
                   resetForm();
@@ -609,97 +678,110 @@ const Inventario: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad de Madejas</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock En Conos</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredProductos.map(producto => (
-                <tr key={producto.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{producto.nombre}</div>
-                      {producto.descripcion && (
-                        <div className="text-sm text-gray-500 truncate max-w-xs">{producto.descripcion}</div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {producto.color}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      producto.estado === 'Por Hilandar' || producto.estado === 'Por Devanar'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : producto.estado === 'Conos Devanados'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {producto.estado}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {producto.cantidad || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {(producto.estado === 'Por Hilandar' || producto.estado === 'Por Devanar') ? (
-                      'En proceso...'
-                    ) : (
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        producto.stock > 10 ? 'bg-green-100 text-green-800' :
-                        producto.stock > 0 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {producto.stock}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {producto.fecha_registro
-                      ? new Date(producto.fecha_registro).toLocaleDateString('es-ES', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric'
-                        })
-                      : 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleViewDetails(producto)}
-                        className="text-gray-600 hover:text-gray-900"
-                        title="Ver detalles"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleEdit(producto)}
-                        className="text-blue-600 hover:text-blue-900"
-                        title="Editar"
-                      >
-                        <Edit size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(producto)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Eliminar"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
+          {filteredProductos.length === 0 ? (
+            <div className="p-12 text-center">
+              <Package className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+              <p className="text-gray-500 font-medium">Sin productos</p>
+              <p className="text-sm text-gray-400 mt-1">No hay productos registrados en esta sección</p>
+            </div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad de Madejas</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock En Conos</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredProductos.map(producto => (
+                  <tr
+                    key={producto.id}
+                    className={`hover:bg-gray-50 transition-colors ${
+                      highlightedProductId === producto.id ? 'highlight-pulse' : ''
+                    }`}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{producto.nombre}</div>
+                        {producto.descripcion && (
+                          <div className="text-sm text-gray-500 truncate max-w-xs">{producto.descripcion}</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {producto.color}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        producto.estado === 'Por Devanar'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : producto.estado === 'Conos Devanados'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {producto.estado}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {producto.cantidad || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {activeTab === 'tintoreria' ? (
+                        <span className="text-gray-500">En proceso...</span>
+                      ) : (
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          producto.stock > 10 ? 'bg-green-100 text-green-800' :
+                          producto.stock > 0 ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {producto.stock}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {producto.fecha_registro
+                        ? new Date(producto.fecha_registro).toLocaleDateString('es-ES', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric'
+                          })
+                        : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleViewDetails(producto)}
+                          className="text-gray-600 hover:text-gray-900"
+                          title="Ver detalles"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleEdit(producto)}
+                          className="text-blue-600 hover:text-blue-900"
+                          title="Editar"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(producto)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
