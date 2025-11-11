@@ -61,7 +61,8 @@ const Inventario: React.FC = () => {
     cantidad: '',
     precio_base: '',
     precio_uni: '',
-    stock: ''
+    stock: '',
+    fecha_registro: getTodayDateString()
   });
 
   // Función para actualizar automáticamente el stock cuando cambia la cantidad
@@ -169,7 +170,8 @@ const Inventario: React.FC = () => {
       cantidad: '',
       precio_base: '',
       precio_uni: '',
-      stock: ''
+      stock: '',
+      fecha_registro: getTodayDateString()
     });
     setEditingProduct(null);
     setSelectedProduct(null);
@@ -228,7 +230,7 @@ const Inventario: React.FC = () => {
         return;
       }
 
-      const fechaActual = new Date().toISOString();
+      const fechaSeleccionada = convertDateWithCurrentTime(hilanderiaData.fecha_registro);
       let nuevoProductoId: string | null = null;
 
       if (cantidadProcesada === cantidadOriginal) {
@@ -241,8 +243,8 @@ const Inventario: React.FC = () => {
           precio_uni: parseFloat(hilanderiaData.precio_uni),
           stock: parseInt(hilanderiaData.stock),
           cantidad: cantidadProcesada,
-          fecha_ingreso: fechaActual,
-          fecha_registro: fechaActual
+          fecha_ingreso: fechaSeleccionada,
+          fecha_registro: fechaSeleccionada
         };
 
         const newProduct = await SupabaseService.createProducto(nuevoProducto);
@@ -263,8 +265,8 @@ const Inventario: React.FC = () => {
           precio_uni: parseFloat(hilanderiaData.precio_uni),
           stock: parseInt(hilanderiaData.stock),
           cantidad: cantidadProcesada,
-          fecha_ingreso: fechaActual,
-          fecha_registro: fechaActual
+          fecha_ingreso: fechaSeleccionada,
+          fecha_registro: fechaSeleccionada
         };
 
         const newProduct = await SupabaseService.createProducto(nuevoProducto);
@@ -300,7 +302,8 @@ const Inventario: React.FC = () => {
       cantidad: '',
       precio_base: '',
       precio_uni: '',
-      stock: ''
+      stock: '',
+      fecha_registro: getTodayDateString()
     });
     loadProductos();
   };
@@ -1039,7 +1042,20 @@ const Inventario: React.FC = () => {
                 Cantidad disponible: {selectedProduct.cantidad}
               </p>
             </div>
-            
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Registro</label>
+              <input
+                type="date"
+                required
+                value={hilanderiaData.fecha_registro}
+                onChange={(e) => setHilanderiaData({ ...hilanderiaData, fecha_registro: e.target.value })}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">Fecha en que se registra el producto en el sistema</p>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Precio Base</label>
               <input

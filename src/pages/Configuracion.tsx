@@ -24,7 +24,7 @@ import Modal from '../components/Common/Modal';
 import DeleteConfirmationModal from '../components/Common/DeleteConfirmationModal';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 
-const APP_VERSION = '7.0.0';
+const APP_VERSION = '7.1.0';
 const SCHEMA_VERSION = '2.2.0';
 
 export default function Configuracion() {
