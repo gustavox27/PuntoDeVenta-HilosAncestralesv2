@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Calendar, DollarSign, Package, X, Eye, Download, Filter, Clock, CreditCard, FileText, Edit2, Save } from 'lucide-react';
+import { ShoppingBag, Calendar, DollarSign, Package, X, Eye, Download, Filter, Clock, CreditCard, FileText, Edit2, Save, Trash2 } from 'lucide-react';
 import { SupabaseService } from '../../services/supabaseService';
 import { ExportUtils } from '../../utils/exportUtils';
 import { Venta } from '../../types';
 import LoadingSpinner from '../Common/LoadingSpinner';
 import Modal from '../Common/Modal';
+import DeleteAnticipoModal from './DeleteAnticipoModal';
 import toast from 'react-hot-toast';
 
 interface HistorialComprasModalProps {
@@ -39,6 +40,9 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
     observaciones: ''
   });
   const [isUpdatingAnticipo, setIsUpdatingAnticipo] = useState(false);
+  const [showDeleteAnticipoModal, setShowDeleteAnticipoModal] = useState(false);
+  const [anticipoToDelete, setAnticipoToDelete] = useState<any>(null);
+  const [isDeletingAnticipo, setIsDeletingAnticipo] = useState(false);
 
   useEffect(() => {
     if (isOpen && usuarioId) {
@@ -140,6 +144,29 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
       toast.error('Error al actualizar el anticipo');
     } finally {
       setIsUpdatingAnticipo(false);
+    }
+  };
+
+  const handleDeleteClick = (anticipo: any) => {
+    setAnticipoToDelete(anticipo);
+    setShowDeleteAnticipoModal(true);
+  };
+
+  const handleConfirmDeleteAnticipo = async () => {
+    if (!anticipoToDelete) return;
+
+    try {
+      setIsDeletingAnticipo(true);
+      await SupabaseService.deleteAnticipo(anticipoToDelete.id);
+      await loadAnticipoInicial();
+      toast.success('Anticipo eliminado correctamente');
+    } catch (error) {
+      console.error('Error deleting anticipo:', error);
+      toast.error('Error al eliminar el anticipo');
+    } finally {
+      setIsDeletingAnticipo(false);
+      setShowDeleteAnticipoModal(false);
+      setAnticipoToDelete(null);
     }
   };
 
@@ -612,14 +639,24 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
                           Disponible
                         </span>
                       </div>
-                      <button
-                        onClick={() => handleEditAnticipo(anticipo)}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-medium flex items-center space-x-1.5 transition-colors shadow-sm"
-                        title="Editar anticipo"
-                      >
-                        <Edit2 size={12} />
-                        <span>Editar</span>
-                      </button>
+                      <div className="flex flex-col space-y-1.5 w-full">
+                        <button
+                          onClick={() => handleEditAnticipo(anticipo)}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-medium flex items-center justify-center space-x-1.5 transition-colors shadow-sm"
+                          title="Editar anticipo"
+                        >
+                          <Edit2 size={12} />
+                          <span>Editar</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(anticipo)}
+                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-medium flex items-center justify-center space-x-1.5 transition-colors shadow-sm"
+                          title="Eliminar anticipo"
+                        >
+                          <Trash2 size={12} />
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -683,6 +720,19 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
           </div>
         </div>
       </Modal>
+
+      <DeleteAnticipoModal
+        isOpen={showDeleteAnticipoModal}
+        onClose={() => {
+          setShowDeleteAnticipoModal(false);
+          setAnticipoToDelete(null);
+        }}
+        onConfirm={handleConfirmDeleteAnticipo}
+        anticipo={anticipoToDelete}
+        clienteName={usuarioNombre}
+        nuevoSaldoDisponible={anticipoInicial - (anticipoToDelete?.monto || 0)}
+        isDeleting={isDeletingAnticipo}
+      />
 
       <Modal
         isOpen={showEditAnticipoModal}
