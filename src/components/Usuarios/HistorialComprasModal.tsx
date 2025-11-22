@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Calendar, DollarSign, Package, X, Eye, Download, Filter, Clock, CreditCard, FileText, Edit2, Save, Trash2 } from 'lucide-react';
+import { ShoppingBag, Calendar, DollarSign, Package, X, Eye, Download, Filter, Clock, CreditCard, FileText, Edit2, Save, Trash2, ChevronDown } from 'lucide-react';
 import { SupabaseService } from '../../services/supabaseService';
 import { ExportUtils } from '../../utils/exportUtils';
 import { Venta } from '../../types';
 import LoadingSpinner from '../Common/LoadingSpinner';
 import Modal from '../Common/Modal';
 import DeleteAnticipoModal from './DeleteAnticipoModal';
+import MovementHistory from './MovementHistory';
 import toast from 'react-hot-toast';
 
 interface HistorialComprasModalProps {
@@ -43,6 +44,7 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
   const [showDeleteAnticipoModal, setShowDeleteAnticipoModal] = useState(false);
   const [anticipoToDelete, setAnticipoToDelete] = useState<any>(null);
   const [isDeletingAnticipo, setIsDeletingAnticipo] = useState(false);
+  const [showMovementHistory, setShowMovementHistory] = useState(false);
 
   useEffect(() => {
     if (isOpen && usuarioId) {
@@ -96,8 +98,9 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
       const anticipos = await SupabaseService.getAnticiposPorCliente(usuarioId);
       const anticiposSinVenta = anticipos.filter(a => !a.venta_id);
       setAnticiposIniciales(anticiposSinVenta);
-      const totalDisponible = anticiposSinVenta.reduce((sum, a) => sum + a.monto, 0);
-      setAnticipoInicial(totalDisponible);
+
+      const historyData = await SupabaseService.getMovementHistory(usuarioId);
+      setAnticipoInicial(historyData.saldoDisponible);
     } catch (error) {
       console.error('Error loading anticipo inicial:', error);
     }
@@ -319,14 +322,10 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
 
             <div
               onClick={() => {
-                if (anticiposIniciales.length > 0) {
-                  setShowAnticiposModal(true);
-                }
+                setShowMovementHistory(true);
               }}
-              className={`bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-3 border border-emerald-200 ${
-                anticiposIniciales.length > 0 ? 'cursor-pointer hover:shadow-md transition-all hover:scale-105' : ''
-              }`}
-              title={anticiposIniciales.length > 0 ? 'Click para ver historial de anticipos iniciales' : ''}
+              className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-3 border border-emerald-200 cursor-pointer hover:shadow-md transition-all hover:scale-105"
+              title="Click para ver historial de movimientos"
             >
               <div className="flex items-center space-x-2">
                 <div className="p-1.5 bg-white rounded-lg shadow-sm">
@@ -587,6 +586,15 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={showMovementHistory}
+        onClose={() => setShowMovementHistory(false)}
+        title={`Historial de Movimientos - ${usuarioNombre}`}
+        size="xl"
+      >
+        <MovementHistory usuarioId={usuarioId} usuarioNombre={usuarioNombre} />
       </Modal>
 
       <Modal

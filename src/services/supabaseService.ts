@@ -554,10 +554,48 @@ export class SupabaseService {
       .from('anticipos')
       .select('*')
       .eq('cliente_id', clienteId)
-      .order('fecha_anticipo', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
 
     if (error) throw error;
     return data;
+  }
+
+  static async getAnticiposDisponibles(clienteId: string) {
+    try {
+      const anticipos = await this.getAnticiposPorCliente(clienteId);
+      const { data: ventas, error: ventasError } = await supabase
+        .from('ventas')
+        .select('id, anticipo_total, descuento_total, total')
+        .eq('id_usuario', clienteId);
+
+      if (ventasError) throw ventasError;
+
+      let totalAnticiposRegistrados = 0;
+      let totalAnticiposConsumidos = 0;
+
+      if (anticipos && anticipos.length > 0) {
+        totalAnticiposRegistrados = anticipos.reduce((sum, a) => sum + (a.monto || 0), 0);
+      }
+
+      if (ventas && ventas.length > 0) {
+        ventas.forEach(venta => {
+          const anticipo_usado = Math.min(venta.anticipo_total || 0, venta.total - (venta.descuento_total || 0));
+          totalAnticiposConsumidos += anticipo_usado;
+        });
+      }
+
+      const saldoDisponible = Math.max(0, totalAnticiposRegistrados - totalAnticiposConsumidos);
+
+      return {
+        totalRegistrados: totalAnticiposRegistrados,
+        totalConsumidos: totalAnticiposConsumidos,
+        saldoDisponible,
+        anticipos
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
   static async getAnticiposPorVenta(ventaId: string) {
@@ -593,7 +631,27 @@ export class SupabaseService {
     return data;
   }
 
+  static async checkAnticipoUsage(id: string) {
+    const { data, error } = await supabase
+      .rpc('check_anticipo_usage', {
+        p_anticipo_id: id
+      });
+
+    if (error) {
+      console.warn('Error checking anticipo usage:', error);
+      return { is_used: false, used_in_venta: false };
+    }
+
+    return data?.[0] || { is_used: false, used_in_venta: false };
+  }
+
   static async updateAnticipo(id: string, updates: Partial<Anticipo>) {
+    const usageStatus = await this.checkAnticipoUsage(id);
+
+    if (usageStatus.is_used) {
+      throw new Error('No se puede editar un anticipo que ya ha sido utilizado en una compra o para pagar una deuda');
+    }
+
     const { data, error } = await supabase
       .from('anticipos')
       .update(updates)
@@ -617,6 +675,12 @@ export class SupabaseService {
   }
 
   static async deleteAnticipo(id: string) {
+    const usageStatus = await this.checkAnticipoUsage(id);
+
+    if (usageStatus.is_used) {
+      throw new Error('No se puede eliminar un anticipo que ya ha sido utilizado en una compra o para pagar una deuda');
+    }
+
     const { data: anticipo } = await supabase
       .from('anticipos')
       .select('monto')
@@ -859,5 +923,267 @@ export class SupabaseService {
     } catch (error) {
       throw error;
     }
+  }
+
+  static async getMovementHistory(clienteId: string) {
+    try {
+      const anticipos = await this.getAnticiposPorCliente(clienteId);
+
+      const { data: ventas, error: ventasError } = await supabase
+        .from('ventas')
+        .select(`
+          id,
+          fecha_venta,
+          total,
+          anticipo_total,
+          descuento_total,
+          estado_pago,
+          completada,
+          saldo_pendiente,
+          detalles:ventas_detalle(
+            id,
+            producto:productos(nombre)
+          )
+        `)
+        .eq('id_usuario', clienteId)
+        .order('fecha_venta', { ascending: false });
+
+      if (ventasError) throw ventasError;
+
+      const movements: any[] = [];
+      let totalAnticiposRegistrados = 0;
+      let totalComprasCompletas = 0;
+      let totalDeudasPendientes = 0;
+
+      anticipos?.forEach(anticipo => {
+        const isUsed = anticipo.venta_id !== null && anticipo.venta_id !== undefined;
+        movements.push({
+          id: anticipo.id,
+          type: 'ingreso',
+          fecha: anticipo.fecha_anticipo,
+          monto: anticipo.monto,
+          metodo_pago: anticipo.metodo_pago,
+          observaciones: anticipo.observaciones,
+          descripcion: 'Anticipo Inicial',
+          venta_id: anticipo.venta_id,
+          subtype: 'anticipo',
+          is_anticipo_used: isUsed
+        });
+        totalAnticiposRegistrados += anticipo.monto || 0;
+      });
+
+      ventas?.forEach(venta => {
+        const montoFinal = venta.total - (venta.descuento_total || 0);
+        const saldoPendiente = venta.saldo_pendiente || 0;
+        const montoPagado = montoFinal - saldoPendiente;
+
+        let descripcion = `Compra - ${venta.detalles?.map((d: any) => d.producto?.nombre).join(', ') || 'Productos'}`;
+        if (saldoPendiente > 0) {
+          descripcion += ` (Saldo pendiente S/ ${saldoPendiente.toFixed(2)})`;
+        }
+
+        movements.push({
+          id: venta.id,
+          type: 'egreso',
+          fecha: venta.fecha_venta,
+          monto: montoPagado,
+          descripcion: descripcion,
+          total_venta: venta.total,
+          descuento: venta.descuento_total || 0,
+          estado_pago: venta.estado_pago,
+          completada: venta.completada,
+          saldo_pendiente: venta.saldo_pendiente,
+          subtype: 'compra'
+        });
+
+        if (venta.completada) {
+          totalComprasCompletas += montoFinal;
+          const pagoAdicional = montoFinal - (venta.anticipo_total || 0);
+          if (pagoAdicional > 0) {
+            movements.push({
+              id: `pago_${venta.id}`,
+              type: 'ingreso',
+              fecha: venta.fecha_venta,
+              monto: pagoAdicional,
+              descripcion: 'Pago en Efectivo',
+              metodo_pago: 'efectivo',
+              venta_id: venta.id,
+              subtype: 'pago_efectivo'
+            });
+          }
+        } else if (venta.saldo_pendiente && venta.saldo_pendiente > 0) {
+          totalDeudasPendientes += venta.saldo_pendiente;
+        }
+      });
+
+      movements.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+      const totalIngreso = movements
+        .filter(m => m.type === 'ingreso')
+        .reduce((sum, m) => sum + m.monto, 0);
+
+      const totalEgreso = movements
+        .filter(m => m.type === 'egreso')
+        .reduce((sum, m) => sum + m.monto, 0);
+
+      const saldoDisponible = Math.max(0, totalIngreso - totalEgreso);
+      const deudaPendiente = totalDeudasPendientes;
+
+      return {
+        movements,
+        saldoDisponible,
+        deudaPendiente,
+        totalIngreso,
+        totalEgreso,
+        totalAnticiposRegistrados,
+        totalComprasCompletas,
+        totalDeudasPendientes
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // DEUDAS Y PAGOS AUTOMÁTICOS
+  static async obtenerDeudasCliente(clienteId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('ventas')
+        .select('*')
+        .eq('id_usuario', clienteId)
+        .gt('saldo_pendiente', 0)
+        .neq('completada', true)
+        .neq('usuario_eliminado', true)
+        .order('fecha_venta', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async calcularTotalDeuda(clienteId: string) {
+    try {
+      const deudas = await this.obtenerDeudasCliente(clienteId);
+      const totalDeuda = deudas.reduce((sum, venta) => sum + (venta.saldo_pendiente || 0), 0);
+      return totalDeuda;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async aplicarAnticipoADeudas(
+    clienteId: string,
+    anticipoId: string,
+    montoAnticipo: number,
+    ventasIds: string[],
+    usuarioActual: string = 'Sistema'
+  ) {
+    try {
+      const { data, error } = await supabase
+        .rpc('aplicar_anticipo_a_deudas', {
+          p_cliente_id: clienteId,
+          p_anticipo_id: anticipoId,
+          p_monto_anticipo: montoAnticipo,
+          p_ventas_ids: ventasIds,
+          p_usuario_actual: usuarioActual
+        });
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      // Fallback si la función no existe: implementar lógica en frontend
+      console.warn('RPC function not available, using fallback logic', error);
+      return await this.aplicarAnticipoADeudasFallback(
+        clienteId,
+        anticipoId,
+        montoAnticipo,
+        ventasIds,
+        usuarioActual
+      );
+    }
+  }
+
+  private static async aplicarAnticipoADeudasFallback(
+    clienteId: string,
+    anticipoId: string,
+    montoAnticipo: number,
+    ventasIds: string[],
+    usuarioActual: string
+  ) {
+    let montoRestante = montoAnticipo;
+    let ventasPagadas = 0;
+    let ventasParcialesCount = 0;
+    let totalAplicado = 0;
+
+    for (const ventaId of ventasIds) {
+      const { data: venta } = await supabase
+        .from('ventas')
+        .select('*')
+        .eq('id', ventaId)
+        .eq('id_usuario', clienteId)
+        .gt('saldo_pendiente', 0)
+        .maybeSingle();
+
+      if (!venta || venta.saldo_pendiente <= 0) continue;
+
+      const montoAplicar = Math.min(venta.saldo_pendiente, montoRestante);
+      const nuevoSaldoPendiente = venta.saldo_pendiente - montoAplicar;
+
+      await supabase
+        .from('ventas')
+        .update({
+          saldo_pendiente: nuevoSaldoPendiente,
+          anticipo_total: (venta.anticipo_total || 0) + montoAplicar,
+          estado_pago: nuevoSaldoPendiente <= 0 ? 'completo' : 'pendiente',
+          completada: nuevoSaldoPendiente <= 0
+        })
+        .eq('id', ventaId);
+
+      await this.createEvento({
+        tipo: 'Anticipo',
+        descripcion: `Anticipo aplicado a deuda pendiente: S/ ${montoAplicar}`,
+        modulo: 'Ventas',
+        accion: 'Aplicar Anticipo a Deuda',
+        usuario: usuarioActual,
+        entidad_id: ventaId,
+        entidad_tipo: 'venta'
+      });
+
+      totalAplicado += montoAplicar;
+      montoRestante -= montoAplicar;
+
+      if (venta.saldo_pendiente === montoAplicar) {
+        ventasPagadas++;
+      } else {
+        ventasParcialesCount++;
+      }
+
+      if (montoRestante <= 0) break;
+    }
+
+    if (totalAplicado > 0) {
+      await this.createEvento({
+        tipo: 'Anticipo',
+        descripcion: `Anticipo inicial aplicado a ${ventasPagadas} venta(s) y ${ventasParcialesCount} parcial(es)`,
+        modulo: 'Ventas',
+        accion: 'Aplicación Automática de Anticipo',
+        usuario: usuarioActual,
+        entidad_id: anticipoId,
+        entidad_tipo: 'anticipo'
+      });
+    }
+
+    return [
+      {
+        exito: true,
+        mensaje: 'Anticipo aplicado exitosamente',
+        ventas_pagadas: ventasPagadas,
+        ventas_parciales: ventasParcialesCount,
+        total_aplicado: totalAplicado,
+        saldo_restante: montoRestante
+      }
+    ];
   }
 }
