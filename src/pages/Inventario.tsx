@@ -114,7 +114,7 @@ const Inventario: React.FC = () => {
   };
 
   const loadPorHilandarProducts = () => {
-    const porHilandar = productos.filter(p => p.estado === 'Por Hilandar' || p.estado === 'Por Devanar');
+    const porHilandar = productos.filter(p => (p.estado === 'Por Hilandar' || p.estado === 'Por Devanar') && (p.cantidad ?? 0) > 0);
     setPorHilandarProducts(porHilandar);
   };
 
@@ -731,7 +731,7 @@ const Inventario: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {producto.cantidad || 'N/A'}
+                      {producto.cantidad ?? 0}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {activeTab === 'tintoreria' ? (
@@ -939,7 +939,7 @@ const Inventario: React.FC = () => {
       <Modal
         isOpen={showHilanderiaModal}
         onClose={() => setShowHilanderiaModal(false)}
-        title="Hilandería - Productos Por Hilandar"
+        title="Hilandería - Productos Por Devanar"
         size="xl"
       >
         {porHilandarProducts.length === 0 ? (

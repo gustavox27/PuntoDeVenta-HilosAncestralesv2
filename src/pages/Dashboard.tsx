@@ -3,12 +3,16 @@ import { DollarSign, Package, ShoppingCart, Users, TrendingUp, Download, FileTex
 import MetricCard from '../components/Dashboard/MetricCard';
 import ChartCard from '../components/Dashboard/ChartCard';
 import SalesChart from '../components/Dashboard/SalesChart';
+import AuditModal from '../components/Audit/AuditModal';
+import AuditRetentionAlert from '../components/Audit/AuditRetentionAlert';
 import { SupabaseService } from '../services/supabaseService';
 import { ExportUtils } from '../utils/exportUtils';
+import { useUser } from '../contexts/UserContext';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import toast from 'react-hot-toast';
 
 const Dashboard: React.FC = () => {
+  const { currentUser } = useUser();
   const [metrics, setMetrics] = useState<any>(null);
   const [eventos, setEventos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,6 +111,10 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {currentUser?.id && (
+        <AuditRetentionAlert userId={currentUser.id} />
+      )}
+
       {/* Header with filters and export buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
@@ -224,84 +232,7 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Audit Modal */}
-      {showAuditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-3 sm:p-6 border-b border-gray-200">
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-                <h3 className="text-base sm:text-xl font-semibold text-gray-900">Registro de Auditoría</h3>
-              </div>
-              <button
-                onClick={() => setShowAuditModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
-              >
-                <span className="text-xl sm:text-2xl">&times;</span>
-              </button>
-            </div>
-
-            <div className="p-3 sm:p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-2 sm:px-4 md:px-6 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha/Hora</th>
-                      <th className="px-2 sm:px-4 md:px-6 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                      <th className="hidden md:table-cell px-2 sm:px-4 md:px-6 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Módulo</th>
-                      <th className="hidden lg:table-cell px-2 sm:px-4 md:px-6 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
-                      <th className="px-2 sm:px-4 md:px-6 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
-                      <th className="hidden sm:table-cell px-2 sm:px-4 md:px-6 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {eventos.map((evento, index) => (
-                      <tr key={evento.id || index} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-2 sm:px-4 md:px-6 py-2 sm:py-4 whitespace-nowrap text-[10px] sm:text-sm text-gray-900">
-                          {new Date(evento.fecha).toLocaleDateString('es-ES', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit'
-                          })}
-                        </td>
-                        <td className="px-2 sm:px-4 md:px-6 py-2 sm:py-4 whitespace-nowrap">
-                          <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                            {evento.tipo}
-                          </span>
-                        </td>
-                        <td className="hidden md:table-cell px-2 sm:px-4 md:px-6 py-2 sm:py-4 whitespace-nowrap text-[10px] sm:text-sm text-gray-600">
-                          {evento.modulo || '-'}
-                        </td>
-                        <td className="hidden lg:table-cell px-2 sm:px-4 md:px-6 py-2 sm:py-4 whitespace-nowrap text-[10px] sm:text-sm text-gray-600">
-                          {evento.accion || '-'}
-                        </td>
-                        <td className="px-2 sm:px-4 md:px-6 py-2 sm:py-4 text-[10px] sm:text-sm text-gray-900 max-w-[150px] sm:max-w-md truncate" title={evento.descripcion}>
-                          {evento.descripcion}
-                        </td>
-                        <td className="hidden sm:table-cell px-2 sm:px-4 md:px-6 py-2 sm:py-4 whitespace-nowrap text-[10px] sm:text-sm text-gray-600">
-                          {evento.usuario || 'Sistema'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="flex justify-end p-3 sm:p-6 border-t border-gray-200">
-              <button
-                onClick={() => setShowAuditModal(false)}
-                className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AuditModal isOpen={showAuditModal} onClose={() => setShowAuditModal(false)} />
     </div>
   );
 };

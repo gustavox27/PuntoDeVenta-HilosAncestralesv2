@@ -1,5 +1,5 @@
-import React from 'react';
-import { DollarSign, X, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { DollarSign, X, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
 
 interface AnticipoConfirmModalProps {
   isOpen: boolean;
@@ -7,6 +7,7 @@ interface AnticipoConfirmModalProps {
   onConfirm: () => void;
   clienteNombre: string;
   montoDisponible: number;
+  clienteId?: string;
 }
 
 const AnticipoConfirmModal: React.FC<AnticipoConfirmModalProps> = ({
@@ -14,8 +15,20 @@ const AnticipoConfirmModal: React.FC<AnticipoConfirmModalProps> = ({
   onClose,
   onConfirm,
   clienteNombre,
-  montoDisponible
+  montoDisponible,
+  clienteId
 }) => {
+  const [montoUltimoAnticipo, setMontoUltimoAnticipo] = useState(0);
+
+  useEffect(() => {
+    if (isOpen && clienteId) {
+      const ultimoAnticipoStored = sessionStorage.getItem(`ultimoAnticipo_${clienteId}`);
+      if (ultimoAnticipoStored) {
+        setMontoUltimoAnticipo(parseFloat(ultimoAnticipoStored));
+      }
+    }
+  }, [isOpen, clienteId]);
+
   if (!isOpen) return null;
 
   return (
@@ -54,23 +67,45 @@ const AnticipoConfirmModal: React.FC<AnticipoConfirmModalProps> = ({
           </div>
 
           <div className="px-4 sm:px-6 py-4 sm:py-6 space-y-4">
-            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg p-4 border-2 border-emerald-200">
-              <div className="flex items-center space-x-3 mb-3">
-                <div className="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <DollarSign className="h-6 w-6 text-white" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg p-4 border-2 border-emerald-200">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <DollarSign className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-600">Último Anticipo Agregado</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Anticipo Disponible</p>
-                  <p className="text-2xl font-bold text-emerald-600">
-                    S/ {montoDisponible.toFixed(2)}
+                <p className="text-2xl font-bold text-emerald-600 ml-10">
+                  S/ {montoUltimoAnticipo.toFixed(2)}
+                </p>
+                <div className="mt-2 ml-10">
+                  <p className="text-xs text-gray-600 flex items-start space-x-1">
+                    <CheckCircle className="w-3 h-3 text-emerald-600 mt-0.5 flex-shrink-0" />
+                    <span>Monto del último anticipo inicial registrado</span>
                   </p>
                 </div>
               </div>
-              <div className="border-t border-emerald-200 pt-3">
-                <p className="text-xs text-gray-600 flex items-start space-x-2">
-                  <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
-                  <span>Este cliente tiene anticipos iniciales sin utilizar en ventas previas</span>
+
+              <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-4 border-2 border-blue-200">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-600">Saldo Disponible</p>
+                  </div>
+                </div>
+                <p className="text-2xl font-bold text-blue-600 ml-10">
+                  S/ {montoDisponible.toFixed(2)}
                 </p>
+                <div className="mt-2 ml-10">
+                  <p className="text-xs text-gray-600 flex items-start space-x-1">
+                    <CheckCircle className="w-3 h-3 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <span>Total de anticipos disponibles para usar</span>
+                  </p>
+                </div>
               </div>
             </div>
 

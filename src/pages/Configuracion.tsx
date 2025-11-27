@@ -20,14 +20,17 @@ import { dataExportService, TableStats } from '../services/dataExportService';
 import { dataImportService, ImportMode, ImportResult } from '../services/dataImportService';
 import { themeService, ThemeColor } from '../services/themeService';
 import { useTheme } from '../contexts/ThemeContext';
+import { useUser } from '../contexts/UserContext';
 import Modal from '../components/Common/Modal';
 import DeleteConfirmationModal from '../components/Common/DeleteConfirmationModal';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
+import RetentionSettings from '../components/Configuracion/RetentionSettings';
 
 const APP_VERSION = '7.1.0';
 const SCHEMA_VERSION = '2.2.0';
 
 export default function Configuracion() {
+  const { currentUser } = useUser();
   const [stats, setStats] = useState<TableStats[]>([]);
   const [loading, setLoading] = useState(true);
   const { theme, setThemeColor, toggleThemeMode } = useTheme();
@@ -552,6 +555,12 @@ export default function Configuracion() {
         onConfirm={handleDeleteAll}
         isDeleting={isDeleting}
       />
+
+      {currentUser?.perfil === 'Administrador' && (
+        <div className="mt-8">
+          <RetentionSettings userId={currentUser.id || ''} />
+        </div>
+      )}
     </div>
   );
 }

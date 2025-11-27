@@ -3,6 +3,13 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import QRCode from 'qrcode';
 
+export interface AuditExportOptions {
+  startDate?: string;
+  endDate?: string;
+  includeOnlyCritical?: boolean;
+  exportedBy?: string;
+}
+
 export class ExportUtils {
   // Exportar a Excel
   static exportToExcel(data: any[], filename: string, sheetName: string = 'Data') {
@@ -10,6 +17,246 @@ export class ExportUtils {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
     XLSX.writeFile(wb, `${filename}.xlsx`);
+  }
+
+  // Exportar auditoría completa a Excel sin límites
+  static exportAuditToExcel(
+    eventos: any[],
+    filename: string = 'audit-report',
+    options: AuditExportOptions = {}
+  ) {
+    const wb = XLSX.utils.book_new();
+
+    const summary = this.generateAuditSummary(eventos);
+    const summarySheet = XLSX.utils.json_to_sheet([summary]);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Resumen');
+
+    const eventosPorTipo = this.groupEventosByType(eventos);
+    for (const [tipo, tipoEventos] of Object.entries(eventosPorTipo)) {
+      const processedData = tipoEventos.map(e => this.flattenEventoForExcel(e));
+      const ws = XLSX.utils.json_to_sheet(processedData);
+      XLSX.utils.book_append_sheet(wb, ws, `${tipo.substring(0, 30)}`);
+    }
+
+    const eventosPorUsuario = this.groupEventosByUser(eventos);
+    for (const [usuario, usuarioEventos] of Object.entries(eventosPorUsuario)) {
+      const processedData = usuarioEventos.map(e => this.flattenEventoForExcel(e));
+      const ws = XLSX.utils.json_to_sheet(processedData);
+      const sheetName = `User-${usuario.substring(0, 20)}`;
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+
+    const criticEventos = eventos.filter(e => e.severidad === 'critical' || e.severidad === 'error');
+    if (criticEventos.length > 0) {
+      const criticData = criticEventos.map(e => this.flattenEventoForExcel(e));
+      const ws = XLSX.utils.json_to_sheet(criticData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Críticos');
+    }
+
+    const allEventosFlat = eventos.map(e => this.flattenEventoForExcel(e));
+    const ws = XLSX.utils.json_to_sheet(allEventosFlat);
+    XLSX.utils.book_append_sheet(wb, ws, 'Todos');
+
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+  }
+
+  // Exportar auditoría completa a PDF sin límites
+  static async exportAuditToPDF(
+    eventos: any[],
+    filename: string = 'audit-report',
+    options: AuditExportOptions = {}
+  ) {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let currentY = 15;
+
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('REPORTE DE AUDITORÍA', pageWidth / 2, currentY, { align: 'center' });
+
+    currentY += 8;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Fecha de generación: ${new Date().toLocaleDateString('es-ES')} ${new Date().toLocaleTimeString('es-ES')}`, 15, currentY);
+
+    if (options.exportedBy) {
+      currentY += 5;
+      doc.text(`Exportado por: ${options.exportedBy}`, 15, currentY);
+    }
+
+    if (options.startDate || options.endDate) {
+      currentY += 5;
+      const dateRange = `${options.startDate || 'Inicio'} - ${options.endDate || 'Fin'}`;
+      doc.text(`Período: ${dateRange}`, 15, currentY);
+    }
+
+    currentY += 10;
+
+    const summary = this.generateAuditSummary(eventos);
+    const summaryText = [
+      `Total de eventos: ${summary.total_events}`,
+      `Eventos críticos: ${summary.critical_events}`,
+      `Eventos de error: ${summary.error_events}`,
+      `Rango de fechas: ${summary.date_range_start} a ${summary.date_range_end}`
+    ];
+
+    summaryText.forEach((text, index) => {
+      doc.setFontSize(10);
+      doc.text(text, 15, currentY + (index * 5));
+    });
+
+    currentY += 25;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Eventos por Tipo', 15, currentY);
+
+    const eventosPorTipo = this.groupEventosByType(eventos);
+    const typeData: any[] = [];
+    for (const [tipo, tipoEventos] of Object.entries(eventosPorTipo)) {
+      typeData.push([tipo, tipoEventos.length]);
+    }
+
+    currentY += 7;
+    (doc as any).autoTable({
+      startY: currentY,
+      head: [['Tipo', 'Cantidad']],
+      body: typeData,
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      margin: { left: 15, right: 15 }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+
+    if (currentY > pageHeight - 30) {
+      doc.addPage();
+      currentY = 15;
+    }
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Listado Detallado de Eventos', 15, currentY);
+
+    currentY += 7;
+
+    const columns = [
+      'Fecha',
+      'Tipo',
+      'Usuario',
+      'Módulo',
+      'Acción',
+      'Descripción',
+      'Severidad'
+    ];
+
+    const tableData = eventos.map(e => [
+      new Date(e.created_at).toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      e.tipo || '',
+      e.usuario || 'Sistema',
+      e.modulo || '',
+      e.accion || '',
+      (e.descripcion || '').substring(0, 50),
+      e.severidad || 'info'
+    ]);
+
+    (doc as any).autoTable({
+      startY: currentY,
+      head: [columns],
+      body: tableData,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [41, 128, 185], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      margin: { left: 15, right: 15 },
+      didDrawPage: (data: any) => {
+        const pageSize = doc.internal.pageSize;
+        const pageHeight = pageSize.getHeight();
+        const pageWidth = pageSize.getWidth();
+
+        doc.setFontSize(10);
+        doc.text(
+          `Página ${data.pageCount}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: 'center' }
+        );
+      }
+    });
+
+    doc.save(`${filename}.pdf`);
+  }
+
+  private static generateAuditSummary(eventos: any[]) {
+    const criticalCount = eventos.filter(e => e.severidad === 'critical').length;
+    const errorCount = eventos.filter(e => e.severidad === 'error').length;
+    const dates = eventos.map(e => new Date(e.created_at));
+    const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+    const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+
+    return {
+      total_events: eventos.length,
+      critical_events: criticalCount,
+      error_events: errorCount,
+      warning_events: eventos.filter(e => e.severidad === 'warning').length,
+      info_events: eventos.filter(e => e.severidad === 'info').length,
+      date_range_start: minDate.toLocaleDateString('es-ES'),
+      date_range_end: maxDate.toLocaleDateString('es-ES')
+    };
+  }
+
+  private static groupEventosByType(eventos: any[]) {
+    return eventos.reduce((acc, evento) => {
+      const tipo = evento.tipo || 'Otros';
+      if (!acc[tipo]) acc[tipo] = [];
+      acc[tipo].push(evento);
+      return acc;
+    }, {} as Record<string, any[]>);
+  }
+
+  private static groupEventosByUser(eventos: any[]) {
+    return eventos.reduce((acc, evento) => {
+      const usuario = evento.usuario || 'Sistema';
+      if (!acc[usuario]) acc[usuario] = [];
+      acc[usuario].push(evento);
+      return acc;
+    }, {} as Record<string, any[]>);
+  }
+
+  private static flattenEventoForExcel(evento: any) {
+    return {
+      'Fecha': new Date(evento.created_at).toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      'Tipo': evento.tipo || '',
+      'Usuario': evento.usuario || 'Sistema',
+      'Módulo': evento.modulo || '',
+      'Acción': evento.accion || '',
+      'Descripción': evento.descripcion || '',
+      'Severidad': evento.severidad || 'info',
+      'Entidad ID': evento.entidad_id || '',
+      'Entidad Tipo': evento.entidad_tipo || '',
+      'Entidad Nombre': evento.entidad_nombre || '',
+      'Valor Anterior': evento.valor_anterior ? JSON.stringify(evento.valor_anterior) : '',
+      'Valor Nuevo': evento.valor_nuevo ? JSON.stringify(evento.valor_nuevo) : '',
+      'Descripción Anterior': evento.estado_anterior_texto || '',
+      'Descripción Nuevo': evento.estado_nuevo_texto || ''
+    };
   }
 
   // Exportar a PDF

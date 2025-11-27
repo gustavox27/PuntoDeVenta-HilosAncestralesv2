@@ -34,13 +34,20 @@ export class SupabaseService {
       accion: 'Crear',
       usuario: this.currentUser || 'Sistema',
       entidad_id: data.id,
-      entidad_tipo: 'usuario'
+      entidad_tipo: 'usuario',
+      valor_nuevo: data
     });
 
     return data;
   }
 
   static async updateUsuario(id: string, updates: Partial<Usuario>) {
+    const { data: oldData } = await supabase
+      .from('usuarios')
+      .select('*')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await supabase
       .from('usuarios')
       .update(updates)
@@ -57,7 +64,9 @@ export class SupabaseService {
       accion: 'Actualizar',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'usuario'
+      entidad_tipo: 'usuario',
+      valor_anterior: oldData,
+      valor_nuevo: data
     });
 
     return data;
@@ -89,7 +98,7 @@ export class SupabaseService {
   static async deleteUsuario(id: string, deleteRelatedData: boolean = false) {
     const { data: usuario } = await supabase
       .from('usuarios')
-      .select('nombre')
+      .select('*')
       .eq('id', id)
       .single();
 
@@ -140,7 +149,8 @@ export class SupabaseService {
       accion: 'Eliminar',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'usuario'
+      entidad_tipo: 'usuario',
+      valor_anterior: usuario
     });
   }
 
@@ -194,7 +204,8 @@ export class SupabaseService {
       accion: 'Crear',
       usuario: this.currentUser || 'Sistema',
       entidad_id: data.id,
-      entidad_tipo: 'producto'
+      entidad_tipo: 'producto',
+      valor_nuevo: data
     });
 
     return data;
@@ -221,6 +232,12 @@ export class SupabaseService {
   }
 
   static async updateProducto(id: string, updates: Partial<Producto>) {
+    const { data: oldData } = await supabase
+      .from('productos')
+      .select('*')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await supabase
       .from('productos')
       .update(updates)
@@ -237,7 +254,9 @@ export class SupabaseService {
       accion: 'Actualizar',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'producto'
+      entidad_tipo: 'producto',
+      valor_anterior: oldData,
+      valor_nuevo: data
     });
 
     return data;
@@ -289,7 +308,7 @@ export class SupabaseService {
   static async deleteProducto(id: string) {
     const { data: producto } = await supabase
       .from('productos')
-      .select('nombre, color')
+      .select('*')
       .eq('id', id)
       .single();
 
@@ -307,11 +326,18 @@ export class SupabaseService {
       accion: 'Eliminar',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'producto'
+      entidad_tipo: 'producto',
+      valor_anterior: producto
     });
   }
 
   static async actualizarStock(id: string, nuevoStock: number) {
+    const { data: oldData } = await supabase
+      .from('productos')
+      .select('*')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await supabase
       .from('productos')
       .update({ stock: nuevoStock })
@@ -328,7 +354,9 @@ export class SupabaseService {
       accion: 'Actualizar Stock',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'producto'
+      entidad_tipo: 'producto',
+      valor_anterior: oldData,
+      valor_nuevo: data
     });
 
     return data;
@@ -411,6 +439,8 @@ export class SupabaseService {
         }
       }
 
+      const ventaCompleta = { ...ventaData, detalles: detallesData };
+
       await this.createEvento({
         tipo: 'Venta',
         descripcion: `Nueva venta realizada por un total de S/ ${venta.total}`,
@@ -418,16 +448,23 @@ export class SupabaseService {
         accion: 'Crear',
         usuario: this.currentUser || venta.vendedor,
         entidad_id: ventaData.id,
-        entidad_tipo: 'venta'
+        entidad_tipo: 'venta',
+        valor_nuevo: ventaCompleta
       });
 
-      return { ...ventaData, detalles: detallesData };
+      return ventaCompleta;
     } catch (error) {
       throw error;
     }
   }
 
   static async updateVenta(id: string, updates: Partial<Venta>) {
+    const { data: oldData } = await supabase
+      .from('ventas')
+      .select('*')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await supabase
       .from('ventas')
       .update(updates)
@@ -444,7 +481,9 @@ export class SupabaseService {
       accion: 'Actualizar',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'venta'
+      entidad_tipo: 'venta',
+      valor_anterior: oldData,
+      valor_nuevo: data
     });
 
     return data;
@@ -452,6 +491,8 @@ export class SupabaseService {
 
   static async deleteVentaWithRollback(ventaId: string) {
     try {
+      const ventaDetails = await this.getVentaDetailsForDelete(ventaId);
+
       const { data, error } = await supabase
         .rpc('eliminar_venta_con_rollback', {
           p_venta_id: ventaId,
@@ -462,6 +503,19 @@ export class SupabaseService {
 
       if (!data.success) {
         throw new Error(data.error);
+      }
+
+      if (ventaDetails) {
+        await this.createEvento({
+          tipo: 'Venta',
+          descripcion: `Venta eliminada completamente (rollback): ${ventaDetails.numero_guia || ventaId} - Total: S/ ${ventaDetails.total}`,
+          modulo: 'Historial',
+          accion: 'Eliminar',
+          usuario: this.currentUser || 'Sistema',
+          entidad_id: ventaId,
+          entidad_tipo: 'venta',
+          valor_anterior: ventaDetails
+        });
       }
 
       return data;
@@ -522,7 +576,7 @@ export class SupabaseService {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(limit);
-    
+
     if (error) throw error;
     return data;
   }
@@ -533,7 +587,148 @@ export class SupabaseService {
       .insert([evento])
       .select()
       .single();
-    
+
+    if (error) throw error;
+    return data;
+  }
+
+  static async getEventoDetallado(eventoId: string) {
+    const { data, error } = await supabase
+      .from('eventos')
+      .select('*')
+      .eq('id', eventoId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  static async searchEventos(filters: {
+    fechaInicio?: string;
+    fechaFin?: string;
+    tipos?: string[];
+    modulos?: string[];
+    usuarios?: string[];
+    acciones?: string[];
+    palabraClave?: string;
+    entidadId?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    let query = supabase
+      .from('eventos')
+      .select('*', { count: 'exact' });
+
+    if (filters.fechaInicio) {
+      query = query.gte('created_at', filters.fechaInicio);
+    }
+    if (filters.fechaFin) {
+      query = query.lte('created_at', filters.fechaFin);
+    }
+    if (filters.tipos && filters.tipos.length > 0) {
+      query = query.in('tipo', filters.tipos);
+    }
+    if (filters.modulos && filters.modulos.length > 0) {
+      query = query.in('modulo', filters.modulos);
+    }
+    if (filters.usuarios && filters.usuarios.length > 0) {
+      query = query.in('usuario', filters.usuarios);
+    }
+    if (filters.acciones && filters.acciones.length > 0) {
+      query = query.in('accion', filters.acciones);
+    }
+    if (filters.palabraClave) {
+      query = query.or(
+        `descripcion.ilike.%${filters.palabraClave}%,entidad_nombre.ilike.%${filters.palabraClave}%`
+      );
+    }
+    if (filters.entidadId) {
+      query = query.eq('entidad_id', filters.entidadId);
+    }
+
+    query = query
+      .order('created_at', { ascending: false })
+      .limit(filters.limit || 50)
+      .range(filters.offset || 0, (filters.offset || 0) + (filters.limit || 50) - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+    return { data: data || [], count: count || 0 };
+  }
+
+  static async getEventosRelacionados(eventoId: string) {
+    const { data, error } = await supabase
+      .from('eventos_relacionados')
+      .select('*')
+      .or(`evento_id.eq.${eventoId},evento_relacionado_id.eq.${eventoId}`)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  static async getEstadisticasAuditoria(filtros?: {
+    fechaInicio?: string;
+    fechaFin?: string;
+  }) {
+    let ventaInicio = new Date();
+    ventaInicio.setHours(0, 0, 0, 0);
+    let ventaFin = new Date();
+    ventaFin.setHours(23, 59, 59, 999);
+
+    if (filtros?.fechaInicio) {
+      ventaInicio = new Date(filtros.fechaInicio);
+    }
+    if (filtros?.fechaFin) {
+      ventaFin = new Date(filtros.fechaFin);
+    }
+
+    const { data, error } = await supabase
+      .from('eventos')
+      .select('tipo, accion, usuario, severidad, created_at')
+      .gte('created_at', ventaInicio.toISOString())
+      .lte('created_at', ventaFin.toISOString());
+
+    if (error) throw error;
+
+    const stats = {
+      totalEventos: data?.length || 0,
+      eventosPorTipo: {} as Record<string, number>,
+      eventosPorAccion: {} as Record<string, number>,
+      eventosPorUsuario: {} as Record<string, number>,
+      eventosPorSeveridad: {} as Record<string, number>,
+      eventosPorDia: {} as Record<string, number>
+    };
+
+    data?.forEach(evento => {
+      stats.eventosPorTipo[evento.tipo] = (stats.eventosPorTipo[evento.tipo] || 0) + 1;
+      stats.eventosPorAccion[evento.accion] = (stats.eventosPorAccion[evento.accion] || 0) + 1;
+      stats.eventosPorUsuario[evento.usuario] = (stats.eventosPorUsuario[evento.usuario] || 0) + 1;
+      stats.eventosPorSeveridad[evento.severidad] = (stats.eventosPorSeveridad[evento.severidad] || 0) + 1;
+
+      const fecha = new Date(evento.created_at).toLocaleDateString('es-ES');
+      stats.eventosPorDia[fecha] = (stats.eventosPorDia[fecha] || 0) + 1;
+    });
+
+    return stats;
+  }
+
+  static async crearRelacionEventos(
+    eventoId: string,
+    eventoRelacionadoId: string,
+    tipoRelacion: 'causa' | 'efecto' | 'cascada' | 'vinculado'
+  ) {
+    const { data, error } = await supabase
+      .from('eventos_relacionados')
+      .insert([{
+        evento_id: eventoId,
+        evento_relacionado_id: eventoRelacionadoId,
+        tipo_relacion: tipoRelacion
+      }])
+      .select()
+      .single();
+
     if (error) throw error;
     return data;
   }
@@ -554,10 +749,48 @@ export class SupabaseService {
       .from('anticipos')
       .select('*')
       .eq('cliente_id', clienteId)
-      .order('fecha_anticipo', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
 
     if (error) throw error;
     return data;
+  }
+
+  static async getAnticiposDisponibles(clienteId: string) {
+    try {
+      const anticipos = await this.getAnticiposPorCliente(clienteId);
+      const { data: ventas, error: ventasError } = await supabase
+        .from('ventas')
+        .select('id, anticipo_total, descuento_total, total')
+        .eq('id_usuario', clienteId);
+
+      if (ventasError) throw ventasError;
+
+      let totalAnticiposRegistrados = 0;
+      let totalAnticiposConsumidos = 0;
+
+      if (anticipos && anticipos.length > 0) {
+        totalAnticiposRegistrados = anticipos.reduce((sum, a) => sum + (a.monto || 0), 0);
+      }
+
+      if (ventas && ventas.length > 0) {
+        ventas.forEach(venta => {
+          const anticipo_usado = Math.min(venta.anticipo_total || 0, venta.total - (venta.descuento_total || 0));
+          totalAnticiposConsumidos += anticipo_usado;
+        });
+      }
+
+      const saldoDisponible = Math.max(0, totalAnticiposRegistrados - totalAnticiposConsumidos);
+
+      return {
+        totalRegistrados: totalAnticiposRegistrados,
+        totalConsumidos: totalAnticiposConsumidos,
+        saldoDisponible,
+        anticipos
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
   static async getAnticiposPorVenta(ventaId: string) {
@@ -587,13 +820,40 @@ export class SupabaseService {
       accion: 'Crear',
       usuario: this.currentUser || 'Sistema',
       entidad_id: data.id,
-      entidad_tipo: 'anticipo'
+      entidad_tipo: 'anticipo',
+      valor_nuevo: data
     });
 
     return data;
   }
 
+  static async checkAnticipoUsage(id: string) {
+    const { data, error } = await supabase
+      .rpc('check_anticipo_usage', {
+        p_anticipo_id: id
+      });
+
+    if (error) {
+      console.warn('Error checking anticipo usage:', error);
+      return { is_used: false, used_in_venta: false };
+    }
+
+    return data?.[0] || { is_used: false, used_in_venta: false };
+  }
+
   static async updateAnticipo(id: string, updates: Partial<Anticipo>) {
+    const usageStatus = await this.checkAnticipoUsage(id);
+
+    if (usageStatus.is_used) {
+      throw new Error('No se puede editar un anticipo que ya ha sido utilizado en una compra o para pagar una deuda');
+    }
+
+    const { data: oldData } = await supabase
+      .from('anticipos')
+      .select('*')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await supabase
       .from('anticipos')
       .update(updates)
@@ -610,16 +870,24 @@ export class SupabaseService {
       accion: 'Actualizar',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'anticipo'
+      entidad_tipo: 'anticipo',
+      valor_anterior: oldData,
+      valor_nuevo: data
     });
 
     return data;
   }
 
   static async deleteAnticipo(id: string) {
+    const usageStatus = await this.checkAnticipoUsage(id);
+
+    if (usageStatus.is_used) {
+      throw new Error('No se puede eliminar un anticipo que ya ha sido utilizado en una compra o para pagar una deuda');
+    }
+
     const { data: anticipo } = await supabase
       .from('anticipos')
-      .select('monto')
+      .select('*')
       .eq('id', id)
       .single();
 
@@ -637,7 +905,8 @@ export class SupabaseService {
       accion: 'Eliminar',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'anticipo'
+      entidad_tipo: 'anticipo',
+      valor_anterior: anticipo
     });
   }
 
@@ -668,13 +937,20 @@ export class SupabaseService {
       accion: 'Crear',
       usuario: this.currentUser || 'Sistema',
       entidad_id: data.id,
-      entidad_tipo: 'color'
+      entidad_tipo: 'color',
+      valor_nuevo: data
     });
 
     return data;
   }
 
   static async updateColor(id: string, updates: Partial<{ nombre: string; codigo_color?: string; descripcion?: string }>) {
+    const { data: oldData } = await supabase
+      .from('colores')
+      .select('*')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await supabase
       .from('colores')
       .update(updates)
@@ -691,7 +967,9 @@ export class SupabaseService {
       accion: 'Actualizar',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'color'
+      entidad_tipo: 'color',
+      valor_anterior: oldData,
+      valor_nuevo: data
     });
 
     return data;
@@ -700,7 +978,7 @@ export class SupabaseService {
   static async deleteColor(id: string) {
     const { data: color } = await supabase
       .from('colores')
-      .select('nombre')
+      .select('*')
       .eq('id', id)
       .single();
 
@@ -718,7 +996,8 @@ export class SupabaseService {
       accion: 'Eliminar',
       usuario: this.currentUser || 'Sistema',
       entidad_id: id,
-      entidad_tipo: 'color'
+      entidad_tipo: 'color',
+      valor_anterior: color
     });
   }
 
@@ -859,5 +1138,267 @@ export class SupabaseService {
     } catch (error) {
       throw error;
     }
+  }
+
+  static async getMovementHistory(clienteId: string) {
+    try {
+      const anticipos = await this.getAnticiposPorCliente(clienteId);
+
+      const { data: ventas, error: ventasError } = await supabase
+        .from('ventas')
+        .select(`
+          id,
+          fecha_venta,
+          total,
+          anticipo_total,
+          descuento_total,
+          estado_pago,
+          completada,
+          saldo_pendiente,
+          detalles:ventas_detalle(
+            id,
+            producto:productos(nombre)
+          )
+        `)
+        .eq('id_usuario', clienteId)
+        .order('fecha_venta', { ascending: false });
+
+      if (ventasError) throw ventasError;
+
+      const movements: any[] = [];
+      let totalAnticiposRegistrados = 0;
+      let totalComprasCompletas = 0;
+      let totalDeudasPendientes = 0;
+
+      anticipos?.forEach(anticipo => {
+        const isUsed = anticipo.venta_id !== null && anticipo.venta_id !== undefined;
+        movements.push({
+          id: anticipo.id,
+          type: 'ingreso',
+          fecha: anticipo.fecha_anticipo,
+          monto: anticipo.monto,
+          metodo_pago: anticipo.metodo_pago,
+          observaciones: anticipo.observaciones,
+          descripcion: 'Anticipo Inicial',
+          venta_id: anticipo.venta_id,
+          subtype: 'anticipo',
+          is_anticipo_used: isUsed
+        });
+        totalAnticiposRegistrados += anticipo.monto || 0;
+      });
+
+      ventas?.forEach(venta => {
+        const montoFinal = venta.total - (venta.descuento_total || 0);
+        const saldoPendiente = venta.saldo_pendiente || 0;
+        const montoPagado = montoFinal - saldoPendiente;
+
+        let descripcion = `Compra - ${venta.detalles?.map((d: any) => d.producto?.nombre).join(', ') || 'Productos'}`;
+        if (saldoPendiente > 0) {
+          descripcion += ` (Saldo pendiente S/ ${saldoPendiente.toFixed(2)})`;
+        }
+
+        movements.push({
+          id: venta.id,
+          type: 'egreso',
+          fecha: venta.fecha_venta,
+          monto: montoPagado,
+          descripcion: descripcion,
+          total_venta: venta.total,
+          descuento: venta.descuento_total || 0,
+          estado_pago: venta.estado_pago,
+          completada: venta.completada,
+          saldo_pendiente: venta.saldo_pendiente,
+          subtype: 'compra'
+        });
+
+        if (venta.completada) {
+          totalComprasCompletas += montoFinal;
+          const pagoAdicional = montoFinal - (venta.anticipo_total || 0);
+          if (pagoAdicional > 0) {
+            movements.push({
+              id: `pago_${venta.id}`,
+              type: 'ingreso',
+              fecha: venta.fecha_venta,
+              monto: pagoAdicional,
+              descripcion: 'Pago en Efectivo',
+              metodo_pago: 'efectivo',
+              venta_id: venta.id,
+              subtype: 'pago_efectivo'
+            });
+          }
+        } else if (venta.saldo_pendiente && venta.saldo_pendiente > 0) {
+          totalDeudasPendientes += venta.saldo_pendiente;
+        }
+      });
+
+      movements.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+      const totalIngreso = movements
+        .filter(m => m.type === 'ingreso')
+        .reduce((sum, m) => sum + m.monto, 0);
+
+      const totalEgreso = movements
+        .filter(m => m.type === 'egreso')
+        .reduce((sum, m) => sum + m.monto, 0);
+
+      const saldoDisponible = Math.max(0, totalIngreso - totalEgreso);
+      const deudaPendiente = totalDeudasPendientes;
+
+      return {
+        movements,
+        saldoDisponible,
+        deudaPendiente,
+        totalIngreso,
+        totalEgreso,
+        totalAnticiposRegistrados,
+        totalComprasCompletas,
+        totalDeudasPendientes
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // DEUDAS Y PAGOS AUTOMÁTICOS
+  static async obtenerDeudasCliente(clienteId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('ventas')
+        .select('*')
+        .eq('id_usuario', clienteId)
+        .gt('saldo_pendiente', 0)
+        .neq('completada', true)
+        .neq('usuario_eliminado', true)
+        .order('fecha_venta', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async calcularTotalDeuda(clienteId: string) {
+    try {
+      const deudas = await this.obtenerDeudasCliente(clienteId);
+      const totalDeuda = deudas.reduce((sum, venta) => sum + (venta.saldo_pendiente || 0), 0);
+      return totalDeuda;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async aplicarAnticipoADeudas(
+    clienteId: string,
+    anticipoId: string,
+    montoAnticipo: number,
+    ventasIds: string[],
+    usuarioActual: string = 'Sistema'
+  ) {
+    try {
+      const { data, error } = await supabase
+        .rpc('aplicar_anticipo_a_deudas', {
+          p_cliente_id: clienteId,
+          p_anticipo_id: anticipoId,
+          p_monto_anticipo: montoAnticipo,
+          p_ventas_ids: ventasIds,
+          p_usuario_actual: usuarioActual
+        });
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      // Fallback si la función no existe: implementar lógica en frontend
+      console.warn('RPC function not available, using fallback logic', error);
+      return await this.aplicarAnticipoADeudasFallback(
+        clienteId,
+        anticipoId,
+        montoAnticipo,
+        ventasIds,
+        usuarioActual
+      );
+    }
+  }
+
+  private static async aplicarAnticipoADeudasFallback(
+    clienteId: string,
+    anticipoId: string,
+    montoAnticipo: number,
+    ventasIds: string[],
+    usuarioActual: string
+  ) {
+    let montoRestante = montoAnticipo;
+    let ventasPagadas = 0;
+    let ventasParcialesCount = 0;
+    let totalAplicado = 0;
+
+    for (const ventaId of ventasIds) {
+      const { data: venta } = await supabase
+        .from('ventas')
+        .select('*')
+        .eq('id', ventaId)
+        .eq('id_usuario', clienteId)
+        .gt('saldo_pendiente', 0)
+        .maybeSingle();
+
+      if (!venta || venta.saldo_pendiente <= 0) continue;
+
+      const montoAplicar = Math.min(venta.saldo_pendiente, montoRestante);
+      const nuevoSaldoPendiente = venta.saldo_pendiente - montoAplicar;
+
+      await supabase
+        .from('ventas')
+        .update({
+          saldo_pendiente: nuevoSaldoPendiente,
+          anticipo_total: (venta.anticipo_total || 0) + montoAplicar,
+          estado_pago: nuevoSaldoPendiente <= 0 ? 'completo' : 'pendiente',
+          completada: nuevoSaldoPendiente <= 0
+        })
+        .eq('id', ventaId);
+
+      await this.createEvento({
+        tipo: 'Anticipo',
+        descripcion: `Anticipo aplicado a deuda pendiente: S/ ${montoAplicar}`,
+        modulo: 'Ventas',
+        accion: 'Aplicar Anticipo a Deuda',
+        usuario: usuarioActual,
+        entidad_id: ventaId,
+        entidad_tipo: 'venta'
+      });
+
+      totalAplicado += montoAplicar;
+      montoRestante -= montoAplicar;
+
+      if (venta.saldo_pendiente === montoAplicar) {
+        ventasPagadas++;
+      } else {
+        ventasParcialesCount++;
+      }
+
+      if (montoRestante <= 0) break;
+    }
+
+    if (totalAplicado > 0) {
+      await this.createEvento({
+        tipo: 'Anticipo',
+        descripcion: `Anticipo inicial aplicado a ${ventasPagadas} venta(s) y ${ventasParcialesCount} parcial(es)`,
+        modulo: 'Ventas',
+        accion: 'Aplicación Automática de Anticipo',
+        usuario: usuarioActual,
+        entidad_id: anticipoId,
+        entidad_tipo: 'anticipo'
+      });
+    }
+
+    return [
+      {
+        exito: true,
+        mensaje: 'Anticipo aplicado exitosamente',
+        ventas_pagadas: ventasPagadas,
+        ventas_parciales: ventasParcialesCount,
+        total_aplicado: totalAplicado,
+        saldo_restante: montoRestante
+      }
+    ];
   }
 }

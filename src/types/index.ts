@@ -71,6 +71,13 @@ export interface Evento {
   entidad_tipo?: string;
   ip_address?: string;
   detalles?: string;
+  valor_anterior?: any;
+  valor_nuevo?: any;
+  estado_anterior_texto?: string;
+  estado_nuevo_texto?: string;
+  severidad?: string;
+  entidad_nombre?: string;
+  metadata?: Record<string, any>;
   created_at?: string;
 }
 
