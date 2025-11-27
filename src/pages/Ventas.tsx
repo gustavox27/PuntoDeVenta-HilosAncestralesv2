@@ -69,6 +69,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
     saldoRestante: 0
   });
   const [usarAnticipoDisponible, setUsarAnticipoDisponible] = useState(true);
+  const [fechaSortOrder, setFechaSortOrder] = useState<'asc' | 'desc' | null>(null);
 
   useEffect(() => {
     loadData();
@@ -86,7 +87,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
 
   useEffect(() => {
     filterProductos();
-  }, [productos, searchProduct]);
+  }, [productos, searchProduct, fechaSortOrder]);
 
   const loadData = async () => {
     try {
@@ -124,19 +125,39 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
     setFilteredUsuarios(filtered);
   };
 
+  const formatearFecha = (fecha: string | undefined): string => {
+    if (!fecha) return 'Sin fecha';
+    try {
+      const date = new Date(fecha);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return 'Fecha inválida';
+    }
+  };
+
   const filterProductos = () => {
-    if (!searchProduct.trim()) {
-      setFilteredProductos(productos);
-      return;
+    let filtered = productos;
+
+    if (searchProduct.trim()) {
+      filtered = productos.filter(producto =>
+        producto.nombre.toLowerCase().includes(searchProduct.toLowerCase()) ||
+        producto.color.toLowerCase().includes(searchProduct.toLowerCase()) ||
+        producto.estado.toLowerCase().includes(searchProduct.toLowerCase()) ||
+        producto.descripcion?.toLowerCase().includes(searchProduct.toLowerCase())
+      );
     }
 
-    const filtered = productos.filter(producto =>
-      producto.nombre.toLowerCase().includes(searchProduct.toLowerCase()) ||
-      producto.color.toLowerCase().includes(searchProduct.toLowerCase()) ||
-      producto.estado.toLowerCase().includes(searchProduct.toLowerCase()) ||
-      producto.descripcion?.toLowerCase().includes(searchProduct.toLowerCase())
-    );
-    
+    if (fechaSortOrder) {
+      filtered = [...filtered].sort((a, b) => {
+        const fechaA = new Date(a.fecha_registro || a.created_at || 0).getTime();
+        const fechaB = new Date(b.fecha_registro || b.created_at || 0).getTime();
+        return fechaSortOrder === 'asc' ? fechaA - fechaB : fechaB - fechaA;
+      });
+    }
+
     setFilteredProductos(filtered);
   };
 
@@ -263,6 +284,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
     setCarritoTemporal([]);
     setShowProductModal(false);
     setSearchProduct('');
+    setFechaSortOrder(null);
   };
 
   const actualizarCantidad = (productoId: string, nuevaCantidad: number) => {
@@ -1196,8 +1218,8 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
         size="2xl"
       >
         <div className="space-y-4">
-          {/* Filtro de búsqueda */}
-          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
+          {/* Filtro de búsqueda y ordenamiento */}
+          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
               <input
@@ -1208,7 +1230,33 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-            <Filter className="h-5 w-5 text-gray-400" />
+
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  if (fechaSortOrder === 'asc') {
+                    setFechaSortOrder('desc');
+                  } else if (fechaSortOrder === 'desc') {
+                    setFechaSortOrder(null);
+                  } else {
+                    setFechaSortOrder('asc');
+                  }
+                }}
+                className={`px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center space-x-2 ${
+                  fechaSortOrder === null
+                    ? 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                    : fechaSortOrder === 'asc'
+                    ? 'bg-green-600 text-white hover:bg-green-700'
+                    : 'bg-green-700 text-white hover:bg-green-800'
+                }`}
+                title={fechaSortOrder === 'asc' ? 'Más antiguo primero' : fechaSortOrder === 'desc' ? 'Más reciente primero' : 'Sin ordenamiento'}
+              >
+                <Calendar size={16} />
+                <span>Fecha</span>
+                {fechaSortOrder === 'asc' && <span className="text-xs ml-1">↑</span>}
+                {fechaSortOrder === 'desc' && <span className="text-xs ml-1">↓</span>}
+              </button>
+            </div>
           </div>
 
           {/* Lista de productos */}
@@ -1217,7 +1265,12 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
               <div key={producto.id} className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900">{producto.nombre}</h4>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <h4 className="font-semibold text-gray-900">{producto.nombre}</h4>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-800 border border-emerald-200 whitespace-nowrap">
+                        {formatearFecha(producto.fecha_registro || producto.created_at)}
+                      </span>
+                    </div>
                     <p className="text-sm text-gray-600">{producto.color}</p>
                     <p className="text-xs text-gray-500">{producto.estado}</p>
                     {producto.descripcion && (
