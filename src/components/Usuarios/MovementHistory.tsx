@@ -256,11 +256,11 @@ const MovementHistory: React.FC<MovementHistoryProps> = ({ usuarioId, usuarioNom
               let amountColor = 'text-gray-600';
 
               if (isPagoEfectivo) {
-                bgColor = 'bg-green-50';
-                iconBg = 'bg-green-100';
-                iconColor = 'text-green-600';
-                textColor = 'text-green-700';
-                amountColor = 'text-green-600';
+                bgColor = 'bg-blue-50';
+                iconBg = 'bg-blue-100';
+                iconColor = 'text-blue-600';
+                textColor = 'text-blue-700';
+                amountColor = 'text-blue-600';
               } else if (isCompra) {
                 bgColor = 'bg-red-50';
                 iconBg = 'bg-red-100';
@@ -292,7 +292,7 @@ const MovementHistory: React.FC<MovementHistoryProps> = ({ usuarioId, usuarioNom
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm font-semibold truncate ${textColor}`}>
-                          {movement.descripcion}
+                          {isPagoEfectivo ? 'Pago Completado' : movement.descripcion}
                         </span>
                         {isCompra && movement.estado_pago === 'pendiente' && (
                           <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">

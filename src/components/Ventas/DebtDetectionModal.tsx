@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { AlertCircle, DollarSign, Calendar, TrendingDown, ChevronUp, ChevronDown, Check, X } from 'lucide-react';
+import Portal from '../Common/Portal';
 import { Venta } from '../../types';
 
 interface DebtDetectionModalProps {
@@ -108,7 +109,8 @@ const DebtDetectionModal: React.FC<DebtDetectionModalProps> = ({
   if (!isOpen || !cliente) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <Portal>
+      <div className="fixed inset-0 z-[80] overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-2 sm:px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         <div
           className="fixed inset-0 transition-opacity bg-black bg-opacity-60 backdrop-blur-sm"
@@ -375,7 +377,8 @@ const DebtDetectionModal: React.FC<DebtDetectionModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </Portal>
   );
 };
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, DollarSign, Calendar, CreditCard, Trash2, X } from 'lucide-react';
 import { SupabaseService } from '../../services/supabaseService';
+import Portal from '../Common/Portal';
 import toast from 'react-hot-toast';
 
 interface DeleteAdvancePaymentModalProps {
@@ -48,7 +49,8 @@ const DeleteAdvancePaymentModal: React.FC<DeleteAdvancePaymentModalProps> = ({
   const newBalance = currentBalance - advance.monto;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <Portal>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm"
         onClick={!loading ? onClose : undefined}
@@ -182,7 +184,8 @@ const DeleteAdvancePaymentModal: React.FC<DeleteAdvancePaymentModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </Portal>
   );
 };
 

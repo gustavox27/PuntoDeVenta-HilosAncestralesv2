@@ -704,9 +704,11 @@ const Inventario: React.FC = () => {
                 {filteredProductos.map(producto => (
                   <tr
                     key={producto.id}
-                    className={`hover:bg-gray-50 transition-colors ${
-                      highlightedProductId === producto.id ? 'highlight-pulse' : ''
-                    }`}
+                    className={`transition-colors ${
+                      activeTab === 'hilanderia' && producto.stock === 0
+                        ? 'bg-red-50 hover:bg-red-100'
+                        : 'hover:bg-gray-50'
+                    } ${highlightedProductId === producto.id ? 'highlight-pulse' : ''}`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
@@ -721,13 +723,17 @@ const Inventario: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs rounded-full ${
-                        producto.estado === 'Por Devanar'
+                        activeTab === 'tintoreria' && (producto.cantidad ?? 0) === 0
+                          ? 'bg-green-100 text-green-800'
+                          : producto.estado === 'Por Devanar'
                           ? 'bg-yellow-100 text-yellow-800'
                           : producto.estado === 'Conos Devanados'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-blue-100 text-blue-800'
                       }`}>
-                        {producto.estado}
+                        {activeTab === 'tintoreria' && (producto.cantidad ?? 0) === 0
+                          ? 'Completado'
+                          : producto.estado}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -738,9 +744,11 @@ const Inventario: React.FC = () => {
                         <span className="text-gray-500">En proceso...</span>
                       ) : (
                         <span className={`px-2 py-1 text-xs rounded-full ${
-                          producto.stock > 10 ? 'bg-green-100 text-green-800' :
-                          producto.stock > 0 ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
+                          producto.stock === 0
+                            ? 'bg-red-100 text-red-800'
+                            : producto.stock > 10
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-yellow-100 text-yellow-800'
                         }`}>
                           {producto.stock}
                         </span>
