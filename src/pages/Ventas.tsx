@@ -1000,7 +1000,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                           />
                         </div>
                         <span className={`text-xs font-medium px-3 py-1 rounded-full ${tipoVenta === 'anticipo' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
-                          Anticipo
+                          Pago Pendiente
                         </span>
                       </div>
                     </label>

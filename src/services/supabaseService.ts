@@ -848,12 +848,15 @@ export class SupabaseService {
       throw new Error('No se puede editar un anticipo que ya ha sido utilizado en una compra o para pagar una deuda');
     }
 
+<<<<<<< HEAD
     const { data: oldData } = await supabase
       .from('anticipos')
       .select('*')
       .eq('id', id)
       .single();
 
+=======
+>>>>>>> 4d0dc54d33316b13c2071359d36e2c0487651d88
     const { data, error } = await supabase
       .from('anticipos')
       .update(updates)
