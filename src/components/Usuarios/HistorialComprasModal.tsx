@@ -332,7 +332,7 @@ const HistorialComprasModal: React.FC<HistorialComprasModalProps> = ({
                   <DollarSign className="h-4 w-4 text-emerald-600" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-medium text-emerald-700 truncate">Anticipo Inicial{anticiposIniciales.length > 0 ? ` (${anticiposIniciales.length})` : ''}</p>
+                  <p className="text-[10px] font-medium text-emerald-700 truncate">Saldo Disponible{anticiposIniciales.length > 0 ? ` (${anticiposIniciales.length})` : ''}</p>
                   <p className="text-base font-bold text-emerald-900">S/ {anticipoInicial.toFixed(2)}</p>
                   {anticiposIniciales.length > 0 && (
                     <p className="text-[9px] text-emerald-600 mt-0.5">Click para ver detalles</p>
