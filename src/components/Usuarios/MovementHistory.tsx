@@ -153,6 +153,13 @@ const MovementHistory: React.FC<MovementHistoryProps> = ({ usuarioId, usuarioNom
     return { dateFormatted, timeFormatted };
   };
 
+  const isCompletedCashPayment = (movement: Movement): boolean => {
+    return (
+      movement.subtype === 'anticipo' &&
+      movement.observaciones === 'Pago en efectivo al momento de la compra'
+    );
+  };
+
   if (loading) return <LoadingSpinner />;
 
   if (!historyData) {
@@ -246,8 +253,9 @@ const MovementHistory: React.FC<MovementHistoryProps> = ({ usuarioId, usuarioNom
               const isPagoEfectivo = movement.subtype === 'pago_efectivo';
               const isCompra = movement.subtype === 'compra';
               const isAnticipo = movement.subtype === 'anticipo';
-              const canEdit = isAnticipo && !movement.is_anticipo_used;
-              const canDelete = isAnticipo && !movement.is_anticipo_used;
+              const isCompletedPayment = isCompletedCashPayment(movement);
+              const canEdit = isAnticipo && !movement.is_anticipo_used && !isCompletedPayment;
+              const canDelete = isAnticipo && !movement.is_anticipo_used && !isCompletedPayment;
 
               let bgColor = 'bg-gray-50';
               let iconBg = 'bg-gray-100';
@@ -267,6 +275,12 @@ const MovementHistory: React.FC<MovementHistoryProps> = ({ usuarioId, usuarioNom
                 iconColor = 'text-red-600';
                 textColor = 'text-red-700';
                 amountColor = 'text-red-600';
+              } else if (isCompletedPayment) {
+                bgColor = 'bg-gray-50';
+                iconBg = 'bg-gray-100';
+                iconColor = 'text-gray-600';
+                textColor = 'text-gray-700';
+                amountColor = 'text-gray-600';
               } else if (isAnticipo) {
                 bgColor = 'bg-green-50';
                 iconBg = 'bg-green-100';
@@ -292,7 +306,7 @@ const MovementHistory: React.FC<MovementHistoryProps> = ({ usuarioId, usuarioNom
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm font-semibold truncate ${textColor}`}>
-                          {isPagoEfectivo ? 'Pago Completado' : movement.descripcion}
+                          {isPagoEfectivo ? 'Pago Completado' : isCompletedPayment ? 'Pago completado' : movement.descripcion}
                         </span>
                         {isCompra && movement.estado_pago === 'pendiente' && (
                           <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">

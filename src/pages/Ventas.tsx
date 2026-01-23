@@ -163,8 +163,8 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
 
   const checkAnticiposDisponibles = async (clienteId: string) => {
     try {
-      const disponiblesData = await SupabaseService.getAnticiposDisponibles(clienteId);
-      const totalDisponible = disponiblesData.saldoDisponible;
+      const historyData = await SupabaseService.getMovementHistory(clienteId);
+      const totalDisponible = historyData.saldoDisponible;
 
       if (totalDisponible > 0) {
         setAnticiposDisponibles({ [clienteId]: totalDisponible });
@@ -479,27 +479,36 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
       setProcesandoVenta(true);
 
       const total = calcularTotal();
-      let anticipoTotal = anticipoData?.monto || 0;
       const codigoQR = uuidv4();
 
       const anticiposDisponiblesCliente = anticiposDisponibles[usuarioSeleccionado.id] || 0;
+      const anticipoNuevo = anticipoData?.monto || 0;
+
+      let anticipoTotal = anticipoNuevo;
       let saldoPendiente = 0;
       let estadoPago: 'completo' | 'pendiente' = 'completo';
       let ventaCompletada = true;
+      let montoPagadoEnEfectivo = 0;
 
       if (tipoVenta === 'completa') {
-        anticipoTotal = anticipoData?.monto || 0;
-        if (anticiposDisponiblesCliente > 0 && usarAnticipoDisponible) {
-          anticipoTotal += anticiposDisponiblesCliente;
-        }
+        const montoRestanteDeAnticipo = Math.max(0, total - anticipoNuevo);
+        const montoAAplicarDeDisponibles = anticiposDisponiblesCliente > 0 && usarAnticipoDisponible
+          ? Math.min(anticiposDisponiblesCliente, montoRestanteDeAnticipo)
+          : 0;
+
+        anticipoTotal = anticipoNuevo + montoAAplicarDeDisponibles;
+        montoPagadoEnEfectivo = Math.max(0, total - anticipoTotal);
+
         saldoPendiente = 0;
         estadoPago = 'completo';
         ventaCompletada = true;
       } else {
-        anticipoTotal = anticipoData?.monto || 0;
-        if (anticiposDisponiblesCliente > 0 && usarAnticipoDisponible) {
-          anticipoTotal += anticiposDisponiblesCliente;
-        }
+        const montoRestanteDeAnticipo = Math.max(0, total - anticipoNuevo);
+        const montoAAplicarDeDisponibles = anticiposDisponiblesCliente > 0 && usarAnticipoDisponible
+          ? Math.min(anticiposDisponiblesCliente, montoRestanteDeAnticipo)
+          : 0;
+
+        anticipoTotal = anticipoNuevo + montoAAplicarDeDisponibles;
         saldoPendiente = Math.max(0, total - anticipoTotal);
         estadoPago = saldoPendiente > 0 ? 'pendiente' : 'completo';
         ventaCompletada = saldoPendiente === 0;
@@ -535,19 +544,33 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
 
       const ventaCreada = await SupabaseService.createVenta(venta, detalles);
 
+      if (tipoVenta === 'completa' && montoPagadoEnEfectivo > 0) {
+        const fechaAnticipoISO = convertDateWithCurrentTime(fechaVenta || getTodayDateString());
+        await SupabaseService.createAnticipo({
+          venta_id: ventaCreada.id,
+          cliente_id: usuarioSeleccionado.id,
+          monto: montoPagadoEnEfectivo,
+          metodo_pago: 'efectivo',
+          fecha_anticipo: fechaAnticipoISO,
+          observaciones: 'Pago en efectivo al momento de la compra'
+        });
+      }
+
       if (anticiposDisponiblesCliente > 0 && usarAnticipoDisponible) {
-        const disponiblesData = await SupabaseService.getAnticiposDisponibles(usuarioSeleccionado.id);
-        const anticipoActualmenteDisponible = disponiblesData.saldoDisponible;
+        const historyData = await SupabaseService.getMovementHistory(usuarioSeleccionado.id);
+        const anticipoActualmenteDisponible = historyData.saldoDisponible;
 
-        let montoRestanteAPagar = total;
-        if (anticipoData) {
-          montoRestanteAPagar = Math.max(0, total - anticipoData.monto);
-        }
-
-        const montoAAplicar = Math.min(anticipoActualmenteDisponible, montoRestanteAPagar);
+        const montoRestanteDeAnticipo = Math.max(0, total - anticipoNuevo);
+        const montoAAplicar = Math.min(anticipoActualmenteDisponible, montoRestanteDeAnticipo);
 
         if (montoAAplicar > 0) {
-          const anticiposPrevios = disponiblesData.anticipos;
+          const anticiposPrevios = historyData.movements
+            .filter(m => m.subtype === 'anticipo' && !m.is_anticipo_used)
+            .map(m => ({
+              id: m.id,
+              monto: m.monto,
+              venta_id: m.venta_id
+            }));
           const anticiposSinVenta = anticiposPrevios.filter(a => !a.venta_id);
 
           let montoAplicado = 0;
@@ -1000,7 +1023,7 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                           />
                         </div>
                         <span className={`text-xs font-medium px-3 py-1 rounded-full ${tipoVenta === 'anticipo' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
-                          Pendiente
+                          Anticipo
                         </span>
                       </div>
                     </label>
@@ -1074,12 +1097,12 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
                 onClick={async () => {
                   if (modalPurpose === 'anticipo') {
                     try {
-                      const disponiblesData = await SupabaseService.getAnticiposDisponibles(usuario.id);
-                      const totalDisponible = disponiblesData.saldoDisponible;
+                      const historyData = await SupabaseService.getMovementHistory(usuario.id);
+                      const totalDisponible = historyData.saldoDisponible;
 
                       if (totalDisponible > 0) {
-                        const anticipos = disponiblesData.anticipos;
-                        const anticiposSinVenta = anticipos.filter(a => !a.venta_id);
+                        const anticiposSinVenta = historyData.movements
+                          .filter(m => m.subtype === 'anticipo' && !m.is_anticipo_used);
                         const ultimoAnticipo = anticiposSinVenta.length > 0 ? anticiposSinVenta[0] : null;
                         const montoUltimoAnticipo = ultimoAnticipo ? ultimoAnticipo.monto : 0;
 

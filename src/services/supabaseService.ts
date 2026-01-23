@@ -95,6 +95,29 @@ export class SupabaseService {
     };
   }
 
+  static async getUsersFinancialSummary() {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_users_financial_summary');
+
+      if (error) throw error;
+
+      const financialMap: Record<string, { saldoDisponible: number; deudaPendiente: number }> = {};
+
+      data?.forEach((row: any) => {
+        financialMap[row.usuario_id] = {
+          saldoDisponible: Number(row.saldo_disponible),
+          deudaPendiente: Number(row.deuda_pendiente)
+        };
+      });
+
+      return financialMap;
+    } catch (error) {
+      console.error('Error getting users financial summary:', error);
+      return {};
+    }
+  }
+
   static async deleteUsuario(id: string, deleteRelatedData: boolean = false) {
     const { data: usuario } = await supabase
       .from('usuarios')
@@ -756,43 +779,6 @@ export class SupabaseService {
     return data;
   }
 
-  static async getAnticiposDisponibles(clienteId: string) {
-    try {
-      const anticipos = await this.getAnticiposPorCliente(clienteId);
-      const { data: ventas, error: ventasError } = await supabase
-        .from('ventas')
-        .select('id, anticipo_total, descuento_total, total')
-        .eq('id_usuario', clienteId);
-
-      if (ventasError) throw ventasError;
-
-      let totalAnticiposRegistrados = 0;
-      let totalAnticiposConsumidos = 0;
-
-      if (anticipos && anticipos.length > 0) {
-        totalAnticiposRegistrados = anticipos.reduce((sum, a) => sum + (a.monto || 0), 0);
-      }
-
-      if (ventas && ventas.length > 0) {
-        ventas.forEach(venta => {
-          const anticipo_usado = Math.min(venta.anticipo_total || 0, venta.total - (venta.descuento_total || 0));
-          totalAnticiposConsumidos += anticipo_usado;
-        });
-      }
-
-      const saldoDisponible = Math.max(0, totalAnticiposRegistrados - totalAnticiposConsumidos);
-
-      return {
-        totalRegistrados: totalAnticiposRegistrados,
-        totalConsumidos: totalAnticiposConsumidos,
-        saldoDisponible,
-        anticipos
-      };
-    } catch (error) {
-      throw error;
-    }
-  }
-
   static async getAnticiposPorVenta(ventaId: string) {
     const { data, error } = await supabase
       .from('anticipos')
@@ -1211,21 +1197,20 @@ export class SupabaseService {
           subtype: 'compra'
         });
 
-        if (venta.completada) {
+        if (venta.completada && venta.saldo_pendiente && venta.saldo_pendiente > 0) {
           totalComprasCompletas += montoFinal;
-          const pagoAdicional = montoFinal - (venta.anticipo_total || 0);
-          if (pagoAdicional > 0) {
-            movements.push({
-              id: `pago_${venta.id}`,
-              type: 'ingreso',
-              fecha: venta.fecha_venta,
-              monto: pagoAdicional,
-              descripcion: 'Pago en Efectivo',
-              metodo_pago: 'efectivo',
-              venta_id: venta.id,
-              subtype: 'pago_efectivo'
-            });
-          }
+          movements.push({
+            id: `pago_${venta.id}`,
+            type: 'ingreso',
+            fecha: venta.fecha_venta,
+            monto: venta.saldo_pendiente,
+            descripcion: 'Pago Completado',
+            metodo_pago: 'efectivo',
+            venta_id: venta.id,
+            subtype: 'pago_efectivo'
+          });
+        } else if (venta.completada) {
+          totalComprasCompletas += montoFinal;
         } else if (venta.saldo_pendiente && venta.saldo_pendiente > 0) {
           totalDeudasPendientes += venta.saldo_pendiente;
         }

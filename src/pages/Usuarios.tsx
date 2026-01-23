@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Plus, Download, Upload, CreditCard as Edit, Trash2, Search, TrendingUp, AlertTriangle, Eye } from 'lucide-react';
 import { SupabaseService } from '../services/supabaseService';
 import { ExportUtils } from '../utils/exportUtils';
@@ -8,6 +8,9 @@ import Modal from '../components/Common/Modal';
 import MetricCard from '../components/Dashboard/MetricCard';
 import HistorialComprasModal from '../components/Usuarios/HistorialComprasModal';
 import DeleteUserModal from '../components/Usuarios/DeleteUserModal';
+import FinancialFilterDropdown from '../components/Usuarios/FinancialFilterDropdown';
+import { filterStorageUtils } from '../utils/filterStorageUtils';
+import { financialCacheService } from '../services/financialCacheService';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -24,6 +27,10 @@ const UsuariosPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showHistorialModal, setShowHistorialModal] = useState(false);
   const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
+  const [financialData, setFinancialData] = useState<Record<string, { saldoDisponible: number; deudaPendiente: number }>>({});
+  const [financialFilter, setFinancialFilter] = useState({ conSaldo: false, conDeuda: false });
+  const [filterDebouncedValue, setFilterDebouncedValue] = useState({ conSaldo: false, conDeuda: false });
+  const filterDebounceTimer = useRef<NodeJS.Timeout | null>(null);
   const [formData, setFormData] = useState({
     nombre: '',
     telefono: '',
@@ -31,16 +38,21 @@ const UsuariosPage: React.FC = () => {
     direccion: '',
     perfil: 'Cliente' as 'Administrador' | 'Vendedor' | 'Almacenero' | 'Cliente'
   });
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const savedFilter = filterStorageUtils.loadFilter();
+    if (savedFilter) {
+      setFinancialFilter(savedFilter);
+    }
     loadUsuarios();
+    loadFinancialData();
   }, []);
 
   useEffect(() => {
     filterUsuarios();
-  }, [usuarios, searchTerm]);
+  }, [usuarios, searchTerm, filterDebouncedValue]);
 
   const loadUsuarios = async () => {
     try {
@@ -55,19 +67,68 @@ const UsuariosPage: React.FC = () => {
     }
   };
 
+  const loadFinancialData = async () => {
+    try {
+      const cachedData = financialCacheService.get();
+      if (cachedData) {
+        setFinancialData(cachedData);
+        return;
+      }
+
+      const data = await SupabaseService.getUsersFinancialSummary();
+      setFinancialData(data);
+      financialCacheService.set(data);
+    } catch (error) {
+      console.error('Error loading financial data:', error);
+    }
+  };
+
   const filterUsuarios = () => {
-    if (!searchTerm) {
-      setFilteredUsuarios(usuarios);
-      return;
+    let filtered = usuarios;
+
+    if (searchTerm) {
+      filtered = filtered.filter(usuario =>
+        usuario.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        usuario.dni.includes(searchTerm) ||
+        (usuario.telefono && usuario.telefono.includes(searchTerm))
+      );
     }
 
-    const filtered = usuarios.filter(usuario =>
-      usuario.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      usuario.dni.includes(searchTerm) ||
-      (usuario.telefono && usuario.telefono.includes(searchTerm))
-    );
-    
+    const isAnyFilterActive = filterDebouncedValue.conSaldo || filterDebouncedValue.conDeuda;
+    if (isAnyFilterActive) {
+      filtered = filtered.filter(usuario => {
+        const userData = financialData[usuario.id];
+        if (!userData) return false;
+
+        const hasSaldo = userData.saldoDisponible > 0;
+        const hasDeuda = userData.deudaPendiente > 0;
+
+        if (filterDebouncedValue.conSaldo && filterDebouncedValue.conDeuda) {
+          return hasSaldo && hasDeuda;
+        } else if (filterDebouncedValue.conSaldo) {
+          return hasSaldo;
+        } else if (filterDebouncedValue.conDeuda) {
+          return hasDeuda;
+        }
+
+        return false;
+      });
+    }
+
     setFilteredUsuarios(filtered);
+  };
+
+  const handleFinancialFilterChange = (newFilter: typeof financialFilter) => {
+    setFinancialFilter(newFilter);
+    filterStorageUtils.saveFilter(newFilter);
+
+    if (filterDebounceTimer.current) {
+      clearTimeout(filterDebounceTimer.current);
+    }
+
+    filterDebounceTimer.current = setTimeout(() => {
+      setFilterDebouncedValue(newFilter);
+    }, 300);
   };
 
   const resetForm = () => {
@@ -83,7 +144,7 @@ const UsuariosPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       if (editingUser) {
         await SupabaseService.updateUsuario(editingUser.id, formData);
@@ -94,6 +155,8 @@ const UsuariosPage: React.FC = () => {
       }
 
       loadUsuarios();
+      financialCacheService.invalidate();
+      await loadFinancialData();
       setShowModal(false);
       resetForm();
     } catch (error: any) {
@@ -138,6 +201,8 @@ const UsuariosPage: React.FC = () => {
       await SupabaseService.deleteUsuario(userToDelete.id, deleteRelatedData);
       toast.success('Usuario eliminado correctamente');
       await loadUsuarios();
+      financialCacheService.invalidate();
+      await loadFinancialData();
       setShowDeleteModal(false);
       setUserToDelete(null);
       setUserDataSummary(null);
@@ -223,6 +288,8 @@ const UsuariosPage: React.FC = () => {
 
         toast.success(`${creados} usuarios importados correctamente. ${errores} errores.`);
         loadUsuarios();
+        financialCacheService.invalidate();
+        await loadFinancialData();
       } catch (error) {
         console.error('Error importing users:', error);
         toast.error('Error al importar usuarios');
@@ -236,11 +303,23 @@ const UsuariosPage: React.FC = () => {
     toast.success('Plantilla descargada correctamente');
   };
 
-  // Calcular métricas (aquí podrías agregar más lógica para obtener datos de ventas)
   const totalUsuarios = usuarios.length;
-  const usuariosRecientes = usuarios.filter(u => 
-    new Date(u.created_at || '').getTime() > Date.now() - (30 * 24 * 60 * 60 * 1000)
-  ).length;
+  const usuariosRecientes = useMemo(() =>
+    usuarios.filter(u =>
+      new Date(u.created_at || '').getTime() > Date.now() - (30 * 24 * 60 * 60 * 1000)
+    ).length,
+    [usuarios]
+  );
+
+  const conSaldoCount = useMemo(() =>
+    Object.values(financialData).filter(d => d.saldoDisponible > 0).length,
+    [financialData]
+  );
+
+  const conDeudaCount = useMemo(() =>
+    Object.values(financialData).filter(d => d.deudaPendiente > 0).length,
+    [financialData]
+  );
 
   if (loading) return <LoadingSpinner />;
 
@@ -375,25 +454,33 @@ const UsuariosPage: React.FC = () => {
         <div className="p-6 border-b border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <h3 className="text-lg font-semibold text-gray-900">Lista de Usuarios</h3>
-            
-            <div className="flex items-center space-x-3">
-              <div className="relative">
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 md:flex-none min-w-64">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                 <input
                   type="text"
                   placeholder="Buscar usuarios..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              
+
+              <FinancialFilterDropdown
+                filter={financialFilter}
+                onFilterChange={handleFinancialFilterChange}
+                conSaldoCount={conSaldoCount}
+                conDeudaCount={conDeudaCount}
+                usuariosTotalCount={totalUsuarios}
+              />
+
               <button
                 onClick={() => {
                   resetForm();
                   setShowModal(true);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 whitespace-nowrap"
               >
                 <Plus size={16} />
                 <span>Nuevo Usuario</span>
@@ -600,6 +687,7 @@ const UsuariosPage: React.FC = () => {
           onClose={() => {
             setShowHistorialModal(false);
             setSelectedUsuario(null);
+            loadFinancialData();
           }}
           usuarioId={selectedUsuario.id}
           usuarioNombre={selectedUsuario.nombre}
