@@ -159,7 +159,7 @@ const Dashboard: React.FC = () => {
         />
         <MetricCard
           title="Ventas Realizadas"
-          value={metrics?.ventasPorPeriodo?.length?.toString() || '0'}
+          value={`S/ ${(metrics?.ventasPorPeriodo?.reduce((sum: number, v: any) => sum + (Number(v.total) || 0), 0) || 0).toFixed(2)}`}
           icon={ShoppingCart}
           color="bg-purple-500"
         />

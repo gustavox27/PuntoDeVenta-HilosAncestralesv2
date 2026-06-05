@@ -113,6 +113,27 @@ export function formatDateWithTime(date: string | Date): string {
 }
 
 /**
+ * Devuelve los límites UTC del día actual en la zona horaria America/Lima (UTC-5, sin horario de verano).
+ * Funciona correctamente sin importar la zona horaria configurada en la máquina.
+ *
+ * @returns { start: Date, end: Date } — timestamps UTC para medianoche y 23:59:59.999 en Lima.
+ */
+export function getLimaDayBounds(): { start: Date; end: Date } {
+  const LIMA_OFFSET_MS = 5 * 60 * 60 * 1000; // UTC-5 → 5 horas detrás de UTC
+  const nowUtc = new Date();
+  // Obtener la fecha actual en Lima desplazando el timestamp UTC
+  const nowLima = new Date(nowUtc.getTime() - LIMA_OFFSET_MS);
+  const y = nowLima.getUTCFullYear();
+  const m = nowLima.getUTCMonth();
+  const d = nowLima.getUTCDate();
+  // Medianoche Lima = UTC 05:00 del mismo día calendario
+  const start = new Date(Date.UTC(y, m, d, 5, 0, 0, 0));
+  // 23:59:59.999 Lima = UTC 04:59:59.999 del día siguiente
+  const end = new Date(Date.UTC(y, m, d + 1, 4, 59, 59, 999));
+  return { start, end };
+}
+
+/**
  * Formatea un ISO string o Date a un string legible en formato 'YYYY-MM-DD'
  * @param date - ISO string o Date object
  * @returns String formateado

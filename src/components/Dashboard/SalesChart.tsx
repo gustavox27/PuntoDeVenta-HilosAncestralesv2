@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns';
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { SupabaseService } from '../../services/supabaseService';
+import { getLimaDayBounds } from '../../utils/dateUtils';
 
 interface SalesData {
   fecha_venta: string;
@@ -29,11 +30,17 @@ const SalesChart: React.FC = () => {
       let intervals: Date[];
 
       switch (period) {
-        case 'day':
-          fechaInicio = startOfDay(now);
-          fechaFin = endOfDay(now);
-          intervals = [fechaInicio];
+        case 'day': {
+          // TICKET-06: usar límites del día en Lima (UTC-5) independiente del timezone de la máquina
+          const bounds = getLimaDayBounds();
+          fechaInicio = bounds.start;
+          fechaFin = bounds.end;
+          // Crear 24 intervalos horarios (cada hora = 3600000 ms)
+          intervals = Array.from({ length: 24 }, (_, i) =>
+            new Date(bounds.start.getTime() + i * 3600000)
+          );
           break;
+        }
         case 'week':
           fechaInicio = startOfWeek(now, { locale: es });
           fechaFin = endOfWeek(now, { locale: es });
@@ -65,13 +72,18 @@ const SalesChart: React.FC = () => {
         let ventasFiltradas: any[];
 
         switch (period) {
-          case 'day':
-            label = format(date, 'HH:mm', { locale: es });
+          case 'day': {
+            // date es el inicio UTC de la hora Lima; mostrar la hora en Lima (UTC-5)
+            const limaHour = new Date(date.getTime() - 5 * 3600000).getUTCHours();
+            label = `${String(limaHour).padStart(2, '0')}:00`;
+            const hourStart = date.getTime();
+            const hourEnd = hourStart + 3600000 - 1;
             ventasFiltradas = ventas.filter(v => {
-              const ventaDate = new Date(v.fecha_venta);
-              return ventaDate.getHours() === date.getHours();
+              const t = new Date(v.fecha_venta).getTime();
+              return t >= hourStart && t <= hourEnd;
             });
             break;
+          }
           case 'week':
             label = format(date, 'EEEE', { locale: es });
             ventasFiltradas = ventas.filter(v => {

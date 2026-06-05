@@ -131,7 +131,7 @@ const Inventario: React.FC = () => {
     let filtered = productos;
 
     if (activeTab === 'tintoreria') {
-      filtered = productos.filter(p => p.estado === 'Por Devanar');
+      filtered = productos.filter(p => p.estado === 'Por Devanar' || p.estado === 'Por Hilandar');
     } else {
       filtered = productos.filter(p => p.estado === 'Conos Devanados' || p.estado === 'Conos Veteados');
     }
@@ -865,7 +865,8 @@ const Inventario: React.FC = () => {
                 type="text"
                 required
                 value={tintoreriaData.color}
-                onChange={(e) => setTintoreriaData({ ...tintoreriaData, color: e.target.value })}
+                onChange={(e) => setTintoreriaData({ ...tintoreriaData, color: e.target.value.toUpperCase() })}
+                style={{ textTransform: 'uppercase' }}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Ingrese o seleccione un color"
               />

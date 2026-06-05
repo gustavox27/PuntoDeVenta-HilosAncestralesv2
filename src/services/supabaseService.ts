@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Usuario, Producto, Venta, VentaDetalle, Evento, Anticipo } from '../types';
+import { Usuario, Producto, Venta, VentaDetalle, Evento, Anticipo, NotaPedido, NotaPedidoDetalle, Programacion, Avance, AvanceAsignacion } from '../types';
 
 export class SupabaseService {
   private static currentUser: string | null = null;
@@ -799,7 +799,7 @@ export class SupabaseService {
 
     if (error) throw error;
 
-    await this.createEvento({
+    this.createEvento({
       tipo: 'Anticipo',
       descripcion: `Anticipo registrado: S/ ${anticipo.monto} - Método: ${anticipo.metodo_pago}`,
       modulo: 'Ventas',
@@ -808,7 +808,7 @@ export class SupabaseService {
       entidad_id: data.id,
       entidad_tipo: 'anticipo',
       valor_nuevo: data
-    });
+    }).catch(() => {});
 
     return data;
   }
@@ -1303,6 +1303,648 @@ export class SupabaseService {
         usuarioActual
       );
     }
+  }
+
+  // NOTAS DE PEDIDO
+  static async getNotasPedido() {
+    const { data, error } = await supabase
+      .from('notas_pedido')
+      .select(`
+        *,
+        cliente:usuarios!notas_pedido_cliente_id_fkey(*),
+        vendedor:usuarios!notas_pedido_vendedor_id_fkey(*),
+        detalles:notas_pedido_detalle(*)
+      `)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []) as NotaPedido[];
+  }
+
+  static async createNotaPedido(
+    nota: { cliente_id?: string; vendedor_id?: string; fecha_pedido: string; anticipo_id?: string },
+    detalles: { color: string; cantidad: number; nombre_producto?: string }[]
+  ) {
+    const { data: notaData, error: notaError } = await supabase
+      .from('notas_pedido')
+      .insert([{ ...nota, estado: 'Pendiente' }])
+      .select()
+      .single();
+    if (notaError) throw notaError;
+
+    const detallesConNota = detalles.map((d, i) => ({
+      nota_id: notaData.id,
+      color: d.color,
+      cantidad: d.cantidad,
+      nombre_producto: d.nombre_producto || 'Madejas Crudas',
+      estado: 'Pendiente',
+      cantidad_asignada: 0,
+      orden_posicion: i
+    }));
+    const { error: detError } = await supabase
+      .from('notas_pedido_detalle')
+      .insert(detallesConNota);
+    if (detError) throw detError;
+
+    this.createEvento({
+      tipo: 'NotaPedido',
+      descripcion: `Nota de pedido creada`,
+      modulo: 'Notas de Pedido',
+      accion: 'Crear',
+      usuario: this.currentUser || 'Sistema',
+      entidad_id: notaData.id,
+      entidad_tipo: 'nota_pedido',
+      valor_nuevo: notaData
+    }).catch(() => {});
+    return notaData;
+  }
+
+  static async updateNotaPedidoEstado(id: string, estado: 'Pendiente' | 'Terminado') {
+    const { error } = await supabase
+      .from('notas_pedido')
+      .update({ estado })
+      .eq('id', id);
+    if (error) throw error;
+  }
+
+  static async updateNotaPedidoDetalle(id: string, updates: Partial<NotaPedidoDetalle>) {
+    const { error } = await supabase
+      .from('notas_pedido_detalle')
+      .update(updates)
+      .eq('id', id);
+    if (error) throw error;
+  }
+
+  static async getOrdenNotasPedido(usuarioId: string) {
+    const { data, error } = await supabase
+      .from('notas_pedido_orden')
+      .select('nota_id, posicion')
+      .eq('usuario_id', usuarioId)
+      .order('posicion');
+    if (error) throw error;
+    return data || [];
+  }
+
+  static async saveOrdenNotasPedido(usuarioId: string, notaIds: string[]) {
+    await supabase.from('notas_pedido_orden').delete().eq('usuario_id', usuarioId);
+    const rows = notaIds.map((nota_id, i) => ({ usuario_id: usuarioId, nota_id, posicion: i }));
+    if (rows.length === 0) return;
+    const { error } = await supabase.from('notas_pedido_orden').insert(rows);
+    if (error) throw error;
+  }
+
+  static async getNotaDeletePreview(notaId: string) {
+    // Fetch detalles
+    const { data: detalles } = await supabase
+      .from('notas_pedido_detalle')
+      .select('*')
+      .eq('nota_id', notaId);
+
+    const enviados = (detalles || []).filter(d => d.estado === 'Enviado' || d.estado === 'Asignado');
+
+    if (enviados.length === 0) {
+      return { hasImpact: false, detalles: detalles || [], programaciones: [], avances: [] };
+    }
+
+    // Find programacion rows linked to these detalles
+    const detalleIds = enviados.map(d => d.id);
+    const { data: origenes } = await supabase
+      .from('programacion_origen')
+      .select('programacion_id, nota_detalle_id, cantidad_origen')
+      .in('nota_detalle_id', detalleIds);
+
+    const progIds = [...new Set((origenes || []).map(o => o.programacion_id))];
+
+    let programaciones: any[] = [];
+    if (progIds.length > 0) {
+      const { data: progs } = await supabase
+        .from('programacion')
+        .select('*')
+        .in('id', progIds);
+      programaciones = progs || [];
+    }
+
+    // Find avance linked to these programaciones
+    let avances: any[] = [];
+    if (progIds.length > 0) {
+      const { data: av } = await supabase
+        .from('avance')
+        .select('*')
+        .in('programacion_id', progIds);
+      avances = av || [];
+    }
+
+    return { hasImpact: true, detalles: detalles || [], programaciones, avances, origenes: origenes || [] };
+  }
+
+  static async deleteNotaPedido(notaId: string) {
+    // 1. Get detalles
+    const { data: detalles } = await supabase
+      .from('notas_pedido_detalle')
+      .select('id, estado')
+      .eq('nota_id', notaId);
+
+    const detalleIds = (detalles || []).map(d => d.id);
+
+    if (detalleIds.length > 0) {
+      // 2. Find programacion_origen rows for these detalles
+      const { data: origenes } = await supabase
+        .from('programacion_origen')
+        .select('programacion_id, nota_detalle_id, cantidad_origen')
+        .in('nota_detalle_id', detalleIds);
+
+      const progIds = [...new Set((origenes || []).map(o => o.programacion_id))];
+
+      // 3. Delete avance_asignaciones linked to these detalles
+      await supabase.from('avance_asignaciones').delete().in('nota_detalle_id', detalleIds);
+
+      // 4. Delete programacion_origen rows
+      await supabase.from('programacion_origen').delete().in('nota_detalle_id', detalleIds);
+
+      if (progIds.length > 0) {
+        // 5. For each programacion: check if it still has other origins; if none, delete it; otherwise update quantities
+        for (const progId of progIds) {
+          const { data: remaining } = await supabase
+            .from('programacion_origen')
+            .select('cantidad_origen')
+            .eq('programacion_id', progId);
+
+          if (!remaining || remaining.length === 0) {
+            // Delete avance linked to this programacion
+            await supabase.from('avance').delete().eq('programacion_id', progId);
+            // Delete the programacion row
+            await supabase.from('programacion').delete().eq('id', progId);
+          } else {
+            // Recalculate totals
+            const newTotal = remaining.reduce((s: number, r: any) => s + r.cantidad_origen, 0);
+            await supabase.from('programacion').update({
+              cantidad_total: newTotal,
+              cantidad_pendiente: newTotal
+            }).eq('id', progId);
+          }
+        }
+      }
+
+      // 6. Delete notas_pedido_detalle
+      await supabase.from('notas_pedido_detalle').delete().eq('nota_id', notaId);
+    }
+
+    // 7. Delete orden entries
+    await supabase.from('notas_pedido_orden').delete().eq('nota_id', notaId);
+
+    // 8. Delete the nota itself
+    const { error } = await supabase.from('notas_pedido').delete().eq('id', notaId);
+    if (error) throw error;
+
+    this.createEvento({
+      tipo: 'NotaPedido',
+      descripcion: `Nota de pedido eliminada (ID: ${notaId})`,
+      modulo: 'Notas de Pedido',
+      accion: 'Eliminar',
+      usuario: this.currentUser || 'Sistema',
+      entidad_id: notaId,
+      entidad_tipo: 'nota_pedido'
+    }).catch(() => {});
+  }
+
+  // PROGRAMACION
+  static async getProgramacion() {
+    const { data, error } = await supabase
+      .from('programacion')
+      .select('*')
+      .order('fecha_envio', { ascending: false });
+    if (error) throw error;
+    return (data || []) as Programacion[];
+  }
+
+  static async getProgramacionConUsuarios() {
+    const { data: progs, error } = await supabase
+      .from('programacion')
+      .select('*')
+      .order('fecha_envio', { ascending: false });
+    if (error) throw error;
+
+    const result = await Promise.all((progs || []).map(async (p) => {
+      const { data: origenes } = await supabase
+        .from('programacion_origen')
+        .select(`nota_detalle:notas_pedido_detalle(nota_id)`)
+        .eq('programacion_id', p.id);
+
+      const notaIds = new Set(
+        (origenes || []).map((o: any) => o.nota_detalle?.nota_id).filter(Boolean)
+      );
+
+      const { data: notas } = await supabase
+        .from('notas_pedido')
+        .select('cliente_id')
+        .in('id', Array.from(notaIds));
+
+      const clienteIds = new Set((notas || []).map((n: any) => n.cliente_id).filter(Boolean));
+
+      return { ...p, usuarios_count: clienteIds.size } as Programacion;
+    }));
+    return result;
+  }
+
+  static async procesarDetallesAProgramacion(detalleIds: string[]) {
+    for (const detalleId of detalleIds) {
+      const { data: detalle } = await supabase
+        .from('notas_pedido_detalle')
+        .select('*')
+        .eq('id', detalleId)
+        .maybeSingle();
+
+      if (!detalle) continue;
+
+      // Find active programacion for this color (EnProceso or Pendiente)
+      const { data: existing } = await supabase
+        .from('programacion')
+        .select('*')
+        .eq('color', detalle.color)
+        .in('estado', ['EnProceso', 'Pendiente'])
+        .maybeSingle();
+
+      let progId: string;
+      if (existing) {
+        const newTotal = existing.cantidad_total + detalle.cantidad;
+        const newPending = existing.cantidad_pendiente + detalle.cantidad;
+        await supabase
+          .from('programacion')
+          .update({ cantidad_total: newTotal, cantidad_pendiente: newPending })
+          .eq('id', existing.id);
+        progId = existing.id;
+      } else {
+        const { data: newProg, error } = await supabase
+          .from('programacion')
+          .insert([{
+            color: detalle.color,
+            cantidad_total: detalle.cantidad,
+            cantidad_pendiente: detalle.cantidad,
+            estado: 'EnProceso'
+          }])
+          .select()
+          .single();
+        if (error) throw error;
+        progId = newProg.id;
+      }
+
+      await supabase.from('programacion_origen').insert([{
+        programacion_id: progId,
+        nota_detalle_id: detalleId,
+        cantidad_origen: detalle.cantidad
+      }]);
+
+      await supabase
+        .from('notas_pedido_detalle')
+        .update({ estado: 'Enviado' })
+        .eq('id', detalleId);
+    }
+
+    this.createEvento({
+      tipo: 'Programacion',
+      descripcion: `${detalleIds.length} producto(s) enviados a programación`,
+      modulo: 'Notas de Pedido',
+      accion: 'Enviar a Programacion',
+      usuario: this.currentUser || 'Sistema'
+    }).catch(() => {});
+  }
+
+  static async updateProgramacionEstado(id: string, estado: Programacion['estado']) {
+    const updates: any = { estado };
+    if (estado === 'Completado') updates.fecha_completado = new Date().toISOString();
+    const { error } = await supabase.from('programacion').update(updates).eq('id', id);
+    if (error) throw error;
+  }
+
+  // AVANCE
+  static async getAvanceDisponible() {
+    const { data, error } = await supabase
+      .from('avance')
+      .select('*, trabajador:usuarios(*)')
+      .gt('cantidad_disponible', 0)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    // Fetch programacion metadata for veteado detection (TICKET-05)
+    const progIds = [...new Set((data || []).map((a: any) => a.programacion_id).filter(Boolean))];
+    let progMap: Record<string, { es_veteado: boolean; estado: string }> = {};
+    if (progIds.length > 0) {
+      const { data: progs } = await supabase
+        .from('programacion')
+        .select('id, es_veteado, estado')
+        .in('id', progIds);
+      (progs || []).forEach((p: any) => {
+        progMap[p.id] = { es_veteado: p.es_veteado || false, estado: p.estado };
+      });
+    }
+
+    const avancesWithProg = (data || []).map((av: any) => ({
+      ...av,
+      programacion: av.programacion_id ? progMap[av.programacion_id] : undefined
+    }));
+
+    return avancesWithProg as Avance[];
+  }
+
+  static async getAvancePorColor(color: string) {
+    const { data, error } = await supabase
+      .from('avance')
+      .select('*')
+      .eq('color', color)
+      .gt('cantidad_disponible', 0);
+    if (error) throw error;
+    const total = (data || []).reduce((s, r) => s + r.cantidad_disponible, 0);
+    return total;
+  }
+
+  static async registrarAvanceTrabajador(programacionId: string, color: string, cantidad: number, trabajadorId: string) {
+    const { data: prog, error: pe } = await supabase
+      .from('programacion')
+      .select('*')
+      .eq('id', programacionId)
+      .maybeSingle();
+    if (pe) throw pe;
+    if (!prog) throw new Error('Programación no encontrada');
+
+    const nuevoPendiente = Math.max(0, prog.cantidad_pendiente - cantidad);
+    const updates: any = { cantidad_pendiente: nuevoPendiente };
+    if (nuevoPendiente === 0) {
+      updates.estado = 'Completado';
+      updates.fecha_completado = new Date().toISOString();
+    }
+    await supabase.from('programacion').update(updates).eq('id', programacionId);
+
+    // Add to avance inventory
+    const { data: existing } = await supabase
+      .from('avance')
+      .select('*')
+      .eq('color', color)
+      .eq('programacion_id', programacionId)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase.from('avance').update({
+        cantidad_disponible: existing.cantidad_disponible + cantidad
+      }).eq('id', existing.id);
+    } else {
+      await supabase.from('avance').insert([{
+        color,
+        cantidad_disponible: cantidad,
+        trabajador_id: trabajadorId,
+        programacion_id: programacionId
+      }]);
+    }
+
+    this.createEvento({
+      tipo: 'Avance',
+      descripcion: `Avance registrado: ${cantidad} de color ${color}`,
+      modulo: 'Procesos',
+      accion: 'Registrar Avance',
+      usuario: this.currentUser || 'Sistema',
+      entidad_id: programacionId,
+      entidad_tipo: 'programacion'
+    }).catch(() => {});
+  }
+
+  static async asignarAvanceACliente(params: {
+    color: string;
+    cantidad: number;
+    nota_detalle_id: string;
+    tipo_producto: 'Crudas' | 'Reteñidas';
+    descripcion?: string;
+    asignado_por_id?: string;
+    cliente_nombre?: string;
+  }) {
+    // Descontar del avance disponible por color
+    const { data: avances } = await supabase
+      .from('avance')
+      .select('*')
+      .eq('color', params.color)
+      .gt('cantidad_disponible', 0)
+      .order('created_at');
+
+    let pendiente = params.cantidad;
+    for (const av of avances || []) {
+      if (pendiente <= 0) break;
+      const restar = Math.min(av.cantidad_disponible, pendiente);
+      const nuevo = av.cantidad_disponible - restar;
+      await supabase.from('avance').update({ cantidad_disponible: nuevo }).eq('id', av.id);
+      pendiente -= restar;
+    }
+
+    // TICKET-A: la cantidad en inventario es el doble de la trabajada
+    const cantidadInventario = params.cantidad * 2;
+
+    const { data: nuevoProducto, error: pe } = await supabase
+      .from('productos')
+      .insert([{
+        nombre: params.tipo_producto === 'Crudas' ? 'Madejas Crudas' : 'Madejas Reteñidas',
+        color: params.color,
+        estado: 'Por Devanar',
+        precio_base: 0,
+        precio_uni: 0,
+        stock: 0,
+        cantidad: cantidadInventario,
+        fecha_ingreso: new Date().toISOString().split('T')[0],
+        descripcion: params.descripcion || ''
+      }])
+      .select()
+      .single();
+    if (pe) throw pe;
+
+    // Registrar asignación (cantidad original, no doblada)
+    await supabase.from('avance_asignaciones').insert([{
+      color: params.color,
+      cantidad: params.cantidad,
+      nota_detalle_id: params.nota_detalle_id,
+      tipo_producto: params.tipo_producto,
+      descripcion: params.descripcion || '',
+      inventario_producto_id: nuevoProducto.id,
+      asignado_por: params.asignado_por_id,
+      fecha: new Date().toISOString()
+    }]);
+
+    // Actualizar detalle de nota
+    const { data: detalle } = await supabase
+      .from('notas_pedido_detalle')
+      .select('*')
+      .eq('id', params.nota_detalle_id)
+      .maybeSingle();
+
+    if (detalle) {
+      const nuevaCantAsignada = (detalle.cantidad_asignada || 0) + params.cantidad;
+      const nuevoEstado = nuevaCantAsignada >= detalle.cantidad ? 'Asignado' : 'Enviado';
+      await supabase.from('notas_pedido_detalle').update({
+        cantidad_asignada: nuevaCantAsignada,
+        estado: nuevoEstado
+      }).eq('id', params.nota_detalle_id);
+
+      // Check if whole nota is done
+      if (nuevoEstado === 'Asignado') {
+        const { data: allDetalles } = await supabase
+          .from('notas_pedido_detalle')
+          .select('estado')
+          .eq('nota_id', detalle.nota_id);
+
+        const allDone = (allDetalles || []).every(d => d.estado === 'Asignado');
+        if (allDone) {
+          await supabase.from('notas_pedido').update({ estado: 'Terminado' }).eq('id', detalle.nota_id);
+        }
+      }
+    }
+
+    this.createEvento({
+      tipo: 'Producto',
+      descripcion: `Avance → Inventario: ${params.cantidad} trabajadas → ${cantidadInventario} madejas de color ${params.color} (×2)`,
+      modulo: 'Inventario',
+      accion: 'ingreso_desde_avance',
+      usuario: this.currentUser || 'Sistema',
+      entidad_id: nuevoProducto.id,
+      entidad_tipo: 'producto',
+      severidad: 'info',
+      valor_nuevo: { ...nuevoProducto, cantidad_original: params.cantidad, cantidad_inventario: cantidadInventario }
+    }).catch(() => {});
+
+    return nuevoProducto;
+  }
+
+  // TICKET-B / TICKET-BUG: devuelve Map<color, cantidad_total_pendiente_de_clientes>.
+  // Usar la suma como cap de "Trabajadas" evita mostrar acumulaciones históricas del avance.
+  static async getColoresConClientesPendientes(): Promise<Map<string, number>> {
+    const { data, error } = await supabase
+      .from('notas_pedido_detalle')
+      .select('color, cantidad, cantidad_asignada, nota:notas_pedido!inner(estado)')
+      .eq('estado', 'Enviado');
+    if (error) throw error;
+
+    const coloresPendientes = new Map<string, number>();
+    (data || []).forEach((d: any) => {
+      if (
+        d.nota?.estado === 'Pendiente' &&
+        (d.cantidad - (d.cantidad_asignada || 0)) > 0
+      ) {
+        const pendiente = d.cantidad - (d.cantidad_asignada || 0);
+        coloresPendientes.set(d.color, (coloresPendientes.get(d.color) || 0) + pendiente);
+      }
+    });
+    return coloresPendientes;
+  }
+
+  static async getClientesConColorPendiente(color: string) {
+    const { data, error } = await supabase
+      .from('notas_pedido_detalle')
+      .select(`
+        id,
+        cantidad,
+        cantidad_asignada,
+        color,
+        nota:notas_pedido(
+          id,
+          estado,
+          cliente:usuarios!notas_pedido_cliente_id_fkey(id, nombre)
+        )
+      `)
+      .eq('color', color)
+      .eq('estado', 'Enviado');
+
+    if (error) throw error;
+
+    return (data || [])
+      .filter((d: any) => d.nota?.estado === 'Pendiente' && d.nota?.cliente)
+      .map((d: any) => ({
+        nota_detalle_id: d.id,
+        cantidad_solicitada: d.cantidad - (d.cantidad_asignada || 0),
+        cantidad_total: d.cantidad,
+        cantidad_asignada: d.cantidad_asignada || 0,
+        color: d.color,
+        cliente_id: d.nota?.cliente?.id,
+        cliente_nombre: d.nota?.cliente?.nombre,
+        nota_id: d.nota?.id
+      }))
+      .filter((d: any) => d.cantidad_solicitada > 0);
+  }
+
+  // TICKET-05 — Conos Veteados (reproceso)
+  static async createReprocesoProgramacion(params: {
+    color: string;
+    cantidad: number;
+    descripcion?: string;
+  }) {
+    const { data, error } = await supabase
+      .from('programacion')
+      .insert([{
+        color: params.color,
+        cantidad_total: params.cantidad,
+        cantidad_pendiente: params.cantidad,
+        estado: 'EnProceso',
+        es_veteado: true
+      }])
+      .select()
+      .single();
+    if (error) throw error;
+
+    this.createEvento({
+      tipo: 'Programacion',
+      descripcion: `Reproceso veteado creado: ${params.cantidad} uds de color ${params.color}`,
+      modulo: 'Programacion',
+      accion: 'crear_reproceso_veteado',
+      usuario: this.currentUser || 'Sistema',
+      entidad_id: data.id,
+      entidad_tipo: 'programacion',
+      severidad: 'info',
+      valor_nuevo: data
+    }).catch(() => {});
+
+    return data as Programacion;
+  }
+
+  static async enviarVeteadoAInventario(params: {
+    color: string;
+    cantidadOriginal: number;
+    descripcion?: string;
+    programacionId: string;
+  }) {
+    const cantidadFinal = params.cantidadOriginal * 2;
+
+    // Zerear todos los avances de esa programación para que no reaparezcan
+    const { data: avances } = await supabase
+      .from('avance')
+      .select('id')
+      .eq('programacion_id', params.programacionId);
+    for (const av of avances || []) {
+      await supabase.from('avance').update({ cantidad_disponible: 0 }).eq('id', av.id);
+    }
+
+    // Crear producto en inventario con cantidad × 2
+    const { data: nuevoProducto, error: pe } = await supabase
+      .from('productos')
+      .insert([{
+        nombre: 'Madejas Reteñidas',
+        color: params.color,
+        estado: 'Por Devanar',
+        precio_base: 0,
+        precio_uni: 0,
+        stock: 0,
+        cantidad: cantidadFinal,
+        fecha_ingreso: new Date().toISOString().split('T')[0],
+        descripcion: params.descripcion || ''
+      }])
+      .select()
+      .single();
+    if (pe) throw pe;
+
+    this.createEvento({
+      tipo: 'Producto',
+      descripcion: `Cono veteado enviado al inventario: ${cantidadFinal} uds de color ${params.color} (${params.cantidadOriginal} × 2)`,
+      modulo: 'Inventario',
+      accion: 'ingreso_veteado_directo',
+      usuario: this.currentUser || 'Sistema',
+      entidad_id: nuevoProducto.id,
+      entidad_tipo: 'producto',
+      severidad: 'info',
+      valor_nuevo: nuevoProducto
+    }).catch(() => {});
+
+    return nuevoProducto;
   }
 
   private static async aplicarAnticipoADeudasFallback(

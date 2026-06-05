@@ -9,9 +9,13 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ClipboardList,
+  CalendarClock,
+  Wrench
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useUser } from '../../contexts/UserContext';
 
 interface SidebarProps {
   currentPage: string;
@@ -22,16 +26,25 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { theme } = useTheme();
+  const { currentUser } = useUser();
   const isDark = theme.mode === 'dark';
 
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
-    { id: 'inventario', label: 'Inventario', icon: Package },
-    { id: 'historial', label: 'Historial', icon: History },
-    { id: 'usuarios', label: 'Usuarios', icon: Users },
-    { id: 'configuracion', label: 'Configuración', icon: Settings },
+  const perfil = currentUser?.perfil;
+
+  const allMenuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, roles: ['Administrador', 'Vendedor', 'Cliente'] },
+    { id: 'ventas', label: 'Ventas', icon: ShoppingCart, roles: ['Administrador', 'Vendedor'] },
+    { id: 'inventario', label: 'Inventario', icon: Package, roles: ['Administrador', 'Vendedor'] },
+    { id: 'historial', label: 'Historial', icon: History, roles: ['Administrador', 'Vendedor'] },
+    { id: 'usuarios', label: 'Usuarios', icon: Users, roles: ['Administrador', 'Vendedor'] },
+    { id: 'notas-pedido', label: 'Notas de Pedido', icon: ClipboardList, roles: ['Administrador', 'Vendedor'] },
+    { id: 'programacion', label: 'Programación', icon: CalendarClock, roles: ['Administrador', 'Vendedor'] },
+    // TICKET-C: Almacenero solo ve Procesos
+    { id: 'procesos', label: 'Procesos', icon: Wrench, roles: ['Administrador', 'Almacenero'] },
+    { id: 'configuracion', label: 'Configuración', icon: Settings, roles: ['Administrador'] },
   ];
+
+  const menuItems = allMenuItems.filter(item => !perfil || item.roles.includes(perfil));
 
   const colorMap: Record<string, { light: string; dark: string }> = {
     blue: { light: 'from-blue-900 to-blue-800', dark: 'from-blue-950 to-gray-900' },
@@ -46,7 +59,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
 
   return (
     <>
-      {/* Mobile menu button */}
       <button
         className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-blue-600 text-white rounded-md"
         onClick={() => setIsOpen(!isOpen)}
@@ -54,7 +66,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
         {isOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
 
-      {/* Overlay */}
       {isOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
@@ -62,13 +73,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
         />
       )}
 
-      {/* Sidebar */}
       <div className={`
         fixed lg:static inset-y-0 left-0 z-50 bg-gradient-to-b ${bgGradient}
         text-white transform transition-all duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         ${isCollapsed ? 'lg:w-20' : 'lg:w-64'}
-        w-64
+        w-64 overflow-y-auto
       `}>
         <div className="p-6 relative">
           <div className={`flex items-center mb-8 ${isCollapsed ? 'justify-center' : 'space-x-2'}`}>
@@ -84,7 +94,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
             {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
 
-          <nav className="space-y-2">
+          <nav className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
               return (

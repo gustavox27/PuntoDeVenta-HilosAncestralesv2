@@ -9,6 +9,9 @@ import Historial from './pages/Historial';
 import UsuariosPage from './pages/Usuarios';
 import Configuracion from './pages/Configuracion';
 import Login from './pages/Login';
+import NotasPedido from './pages/NotasPedido';
+import Programacion from './pages/Programacion';
+import Procesos from './pages/Procesos';
 import { Usuario } from './types';
 import { UserProvider } from './contexts/UserContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -27,6 +30,10 @@ function App() {
         setCurrentUser(user);
         setIsAuthenticated(true);
         SupabaseService.setCurrentUser(user.nombre);
+        // TICKET-C: restaurar sesión de Almacenero siempre en Procesos
+        if (user.perfil === 'Almacenero') {
+          setCurrentPage('procesos');
+        }
       } catch (error) {
         console.error('Error parsing stored user:', error);
         localStorage.removeItem('currentUser');
@@ -39,6 +46,10 @@ function App() {
     setIsAuthenticated(true);
     localStorage.setItem('currentUser', JSON.stringify(usuario));
     SupabaseService.setCurrentUser(usuario.nombre);
+    // TICKET-C: Almacenero entra directamente a Procesos
+    if (usuario.perfil === 'Almacenero') {
+      setCurrentPage('procesos');
+    }
   };
 
   const handleLogout = () => {
@@ -56,16 +67,8 @@ function App() {
           position="top-right"
           toastOptions={{
             duration: 3000,
-            style: {
-              background: '#363636',
-              color: '#fff',
-            },
-            success: {
-              iconTheme: {
-                primary: '#4AED50',
-                secondary: '#FFFAEE',
-              },
-            },
+            style: { background: '#363636', color: '#fff' },
+            success: { iconTheme: { primary: '#4AED50', secondary: '#FFFAEE' } },
           }}
         />
         <Login onLoginSuccess={handleLoginSuccess} />
@@ -80,12 +83,20 @@ function App() {
       inventario: 'Inventario',
       historial: 'Historial de Ventas',
       usuarios: 'Gestión de Usuarios',
+      'notas-pedido': 'Notas de Pedido',
+      programacion: 'Programación',
+      procesos: 'Procesos',
       configuracion: 'Configuración del Sistema'
     };
     return titles[currentPage] || 'HILOSdeCALIDAD';
   };
 
   const renderPage = () => {
+    // TICKET-C: guardia de ruta — Almacenero solo puede ver Procesos
+    if (currentUser?.perfil === 'Almacenero' && currentPage !== 'procesos') {
+      return <Procesos currentUser={currentUser} />;
+    }
+
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard />;
@@ -97,6 +108,12 @@ function App() {
         return <Historial />;
       case 'usuarios':
         return <UsuariosPage />;
+      case 'notas-pedido':
+        return <NotasPedido currentUser={currentUser} />;
+      case 'programacion':
+        return <Programacion />;
+      case 'procesos':
+        return <Procesos currentUser={currentUser} />;
       case 'configuracion':
         return <Configuracion />;
       default:
@@ -112,16 +129,8 @@ function App() {
             position="top-right"
             toastOptions={{
               duration: 3000,
-              style: {
-                background: '#363636',
-                color: '#fff',
-              },
-              success: {
-                iconTheme: {
-                  primary: '#4AED50',
-                  secondary: '#FFFAEE',
-                },
-              },
+              style: { background: '#363636', color: '#fff' },
+              success: { iconTheme: { primary: '#4AED50', secondary: '#FFFAEE' } },
             }}
           />
 

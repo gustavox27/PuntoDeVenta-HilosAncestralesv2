@@ -105,3 +105,73 @@ export interface MetricasVentas {
   productosPopulares: Array<{ nombre: string; cantidad: number }>;
   estadoStock: Array<{ estado: string; cantidad: number }>;
 }
+
+export interface NotaPedido {
+  id: string;
+  cliente_id?: string;
+  vendedor_id?: string;
+  fecha_pedido: string;
+  estado: 'Pendiente' | 'Terminado';
+  anticipo_id?: string;
+  created_at?: string;
+  cliente?: Usuario;
+  vendedor?: Usuario;
+  detalles?: NotaPedidoDetalle[];
+}
+
+export interface NotaPedidoDetalle {
+  id: string;
+  nota_id: string;
+  color: string;
+  cantidad: number;
+  estado: 'Pendiente' | 'Enviado' | 'Asignado';
+  cantidad_asignada: number;
+  nombre_producto: string;
+  orden_posicion: number;
+  created_at?: string;
+}
+
+export interface Programacion {
+  id: string;
+  color: string;
+  cantidad_total: number;
+  cantidad_pendiente: number;
+  fecha_envio: string;
+  fecha_completado?: string;
+  estado: 'Pendiente' | 'EnProceso' | 'Completado' | 'Cancelado';
+  es_veteado?: boolean;
+  created_at?: string;
+  usuarios_count?: number;
+}
+
+export interface ProgramacionOrigen {
+  id: string;
+  programacion_id: string;
+  nota_detalle_id: string;
+  cantidad_origen: number;
+  created_at?: string;
+}
+
+export interface Avance {
+  id: string;
+  color: string;
+  cantidad_disponible: number;
+  trabajador_id?: string;
+  programacion_id?: string;
+  created_at?: string;
+  trabajador?: Usuario;
+  programacion?: { es_veteado?: boolean; estado?: string };
+}
+
+export interface AvanceAsignacion {
+  id: string;
+  color: string;
+  cantidad: number;
+  nota_detalle_id?: string;
+  tipo_producto: 'Crudas' | 'Reteñidas';
+  descripcion?: string;
+  inventario_producto_id?: string;
+  asignado_por?: string;
+  fecha: string;
+  created_at?: string;
+}

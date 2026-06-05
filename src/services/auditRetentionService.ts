@@ -77,16 +77,38 @@ export class AuditRetentionService {
     autoDeleteEnabled: boolean,
     updatedBy: string
   ): Promise<RetentionConfig> {
+    const existing = await this.getRetentionConfig();
+    const now = new Date().toISOString();
+
+    // Si no existe un registro previo (id vacío = tabla vacía), hacer INSERT
+    if (!existing.id) {
+      const { data, error } = await supabase
+        .from('audit_retention_config')
+        .insert([{
+          retention_months: retentionMonths,
+          alert_days_before: alertDaysBefore,
+          auto_delete_enabled: autoDeleteEnabled,
+          created_at: now,
+          updated_at: now,
+          updated_by: updatedBy
+        }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }
+
+    // Registro existente: actualizar por su ID real
     const { data, error } = await supabase
       .from('audit_retention_config')
       .update({
         retention_months: retentionMonths,
         alert_days_before: alertDaysBefore,
         auto_delete_enabled: autoDeleteEnabled,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
         updated_by: updatedBy
       })
-      .eq('id', (await this.getRetentionConfig()).id)
+      .eq('id', existing.id)
       .select()
       .single();
 
