@@ -13,6 +13,7 @@ export interface BackupData {
     schemaVersion: string;
   };
   data: {
+    // Tablas base (siempre presentes)
     usuarios: any[];
     productos: any[];
     ventas: any[];
@@ -20,6 +21,12 @@ export interface BackupData {
     eventos: any[];
     anticipos: any[];
     colores: any[];
+    // Tablas nuevas — opcionales para compatibilidad con backups anteriores
+    notas_pedido?: any[];
+    notas_pedido_detalle?: any[];
+    programacion?: any[];
+    avance?: any[];
+    avance_asignaciones?: any[];
   };
 }
 
@@ -40,6 +47,11 @@ export const dataExportService = {
         { name: 'eventos', label: 'Eventos' },
         { name: 'anticipos', label: 'Anticipos' },
         { name: 'colores', label: 'Colores' },
+        { name: 'notas_pedido', label: 'Notas de Pedido' },
+        { name: 'notas_pedido_detalle', label: 'Detalle Notas Pedido' },
+        { name: 'programacion', label: 'Programación' },
+        { name: 'avance', label: 'Avance' },
+        { name: 'avance_asignaciones', label: 'Asignaciones Avance' },
       ];
 
       const stats = await Promise.all(
@@ -66,7 +78,10 @@ export const dataExportService = {
 
   async exportAllData(): Promise<BackupData> {
     try {
-      const [usuarios, productos, ventas, ventas_detalle, eventos, anticipos, colores] = await Promise.all([
+      const [
+        usuarios, productos, ventas, ventas_detalle, eventos, anticipos, colores,
+        notas_pedido, notas_pedido_detalle, programacion, avance, avance_asignaciones,
+      ] = await Promise.all([
         supabase.from('usuarios').select('*'),
         supabase.from('productos').select('*'),
         supabase.from('ventas').select('*'),
@@ -74,6 +89,11 @@ export const dataExportService = {
         supabase.from('eventos').select('*'),
         supabase.from('anticipos').select('*'),
         supabase.from('colores').select('*'),
+        supabase.from('notas_pedido').select('*'),
+        supabase.from('notas_pedido_detalle').select('*'),
+        supabase.from('programacion').select('*'),
+        supabase.from('avance').select('*'),
+        supabase.from('avance_asignaciones').select('*'),
       ]);
 
       if (usuarios.error) throw usuarios.error;
@@ -83,6 +103,13 @@ export const dataExportService = {
       if (eventos.error) throw eventos.error;
       if (anticipos.error) throw anticipos.error;
       if (colores.error) throw colores.error;
+      // Las tablas nuevas pueden no tener datos; no lanzamos error si están vacías
+      // pero sí si hay un error real de acceso.
+      if (notas_pedido.error) throw notas_pedido.error;
+      if (notas_pedido_detalle.error) throw notas_pedido_detalle.error;
+      if (programacion.error) throw programacion.error;
+      if (avance.error) throw avance.error;
+      if (avance_asignaciones.error) throw avance_asignaciones.error;
 
       const backupData: BackupData = {
         metadata: {
@@ -100,6 +127,11 @@ export const dataExportService = {
           eventos: eventos.data || [],
           anticipos: anticipos.data || [],
           colores: colores.data || [],
+          notas_pedido: notas_pedido.data || [],
+          notas_pedido_detalle: notas_pedido_detalle.data || [],
+          programacion: programacion.data || [],
+          avance: avance.data || [],
+          avance_asignaciones: avance_asignaciones.data || [],
         },
       };
 

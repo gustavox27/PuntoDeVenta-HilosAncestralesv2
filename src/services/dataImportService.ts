@@ -15,6 +15,11 @@ export interface ImportResult {
     eventos: number;
     anticipos: number;
     colores: number;
+    notas_pedido: number;
+    notas_pedido_detalle: number;
+    programacion: number;
+    avance: number;
+    avance_asignaciones: number;
   };
   skipped: {
     usuarios: number;
@@ -24,18 +29,30 @@ export interface ImportResult {
     eventos: number;
     anticipos: number;
     colores: number;
+    notas_pedido: number;
+    notas_pedido_detalle: number;
+    programacion: number;
+    avance: number;
+    avance_asignaciones: number;
   };
   errors: string[];
 }
 
+// Orden respetando dependencias de FK (padres antes que hijos en INSERT).
+// DELETE usa el orden inverso (reverso de este array).
 const TABLE_ORDER = [
-  'usuarios',
-  'productos',
-  'colores',
-  'ventas',
-  'ventas_detalle',
-  'anticipos',
-  'eventos',
+  'usuarios',          // sin FK
+  'colores',           // sin FK
+  'productos',         // sin FK
+  'programacion',      // sin FK significativa
+  'notas_pedido',      // refs usuarios
+  'notas_pedido_detalle', // refs notas_pedido
+  'avance',            // refs programacion, usuarios
+  'avance_asignaciones', // refs avance, notas_pedido_detalle
+  'ventas',            // refs usuarios
+  'ventas_detalle',    // refs ventas, productos
+  'anticipos',         // refs usuarios, ventas
+  'eventos',           // sin FK
 ];
 
 export const dataImportService = {
@@ -79,22 +96,16 @@ export const dataImportService = {
         },
       },
       imported: {
-        usuarios: 0,
-        productos: 0,
-        ventas: 0,
-        ventas_detalle: 0,
-        eventos: 0,
-        anticipos: 0,
-        colores: 0,
+        usuarios: 0, productos: 0, ventas: 0, ventas_detalle: 0,
+        eventos: 0, anticipos: 0, colores: 0,
+        notas_pedido: 0, notas_pedido_detalle: 0, programacion: 0,
+        avance: 0, avance_asignaciones: 0,
       },
       skipped: {
-        usuarios: 0,
-        productos: 0,
-        ventas: 0,
-        ventas_detalle: 0,
-        eventos: 0,
-        anticipos: 0,
-        colores: 0,
+        usuarios: 0, productos: 0, ventas: 0, ventas_detalle: 0,
+        eventos: 0, anticipos: 0, colores: 0,
+        notas_pedido: 0, notas_pedido_detalle: 0, programacion: 0,
+        avance: 0, avance_asignaciones: 0,
       },
       errors: [],
     };

@@ -12,6 +12,12 @@ export interface ValidationResult {
     eventos: number;
     anticipos: number;
     colores: number;
+    // Campos opcionales — backups antiguos no los contienen
+    notas_pedido?: number;
+    notas_pedido_detalle?: number;
+    programacion?: number;
+    avance?: number;
+    avance_asignaciones?: number;
   };
 }
 
@@ -86,6 +92,12 @@ export const dataValidationService = {
       eventos: data.data.eventos?.length || 0,
       anticipos: data.data.anticipos?.length || 0,
       colores: data.data.colores?.length || 0,
+      // Tablas nuevas — opcionales en backups viejos
+      notas_pedido: data.data.notas_pedido?.length ?? 0,
+      notas_pedido_detalle: data.data.notas_pedido_detalle?.length ?? 0,
+      programacion: data.data.programacion?.length ?? 0,
+      avance: data.data.avance?.length ?? 0,
+      avance_asignaciones: data.data.avance_asignaciones?.length ?? 0,
     };
 
     if (data.data.usuarios) {

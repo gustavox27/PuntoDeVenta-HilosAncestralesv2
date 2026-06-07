@@ -512,19 +512,24 @@ export class ExportUtils {
   }
 
   static generateUserTemplate() {
+    // Mismos 5 encabezados que handleExportExcel en Usuarios.tsx,
+    // para que el archivo exportado pueda reimportarse directamente.
     const template = [
       {
-        nombre: 'Juan Pérez',
-        telefono: '987654321',
-        dni: '12345678'
+        'Nombre': 'Juan Pérez',
+        'DNI': '12345678',
+        'Teléfono': '987654321',
+        'Perfil': 'Cliente',
+        'Fecha Registro': new Date().toLocaleDateString('es-PE')
       },
       {
-        nombre: 'María González',
-        telefono: '876543210',
-        dni: '87654321'
+        'Nombre': 'María González',
+        'DNI': '87654321',
+        'Teléfono': '876543210',
+        'Perfil': 'Vendedor',
+        'Fecha Registro': new Date().toLocaleDateString('es-PE')
       }
     ];
-    
     this.exportToExcel(template, 'plantilla-usuarios', 'Usuarios');
   }
 }

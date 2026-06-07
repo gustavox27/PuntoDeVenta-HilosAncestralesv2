@@ -254,9 +254,13 @@ const UsuariosPage: React.FC = () => {
     }
   };
 
+  const VALID_PERFILES = ['Administrador', 'Vendedor', 'Almacenero', 'Cliente'] as const;
+
   const handleMassUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Limpiar el input para permitir reimportar el mismo archivo
+    e.target.value = '';
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -267,26 +271,59 @@ const UsuariosPage: React.FC = () => {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        const usuarios = jsonData.map((row: any) => ({
-          nombre: row.nombre,
-          telefono: row.telefono || '',
-          dni: row.dni
-        }));
+        // Mapear con encabezados españoles (exportación/plantilla actual) Y
+        // con encabezados en minúsculas (compatibilidad con plantillas antiguas).
+        const rowErrors: string[] = [];
+        const usuariosData: Array<{ nombre: string; dni: string; telefono: string; perfil: typeof VALID_PERFILES[number] }> = [];
+
+        jsonData.forEach((row: any, idx: number) => {
+          const fila = idx + 2; // +2: encabezado en fila 1, datos desde fila 2
+          const nombre = row['Nombre'] ?? row['nombre'] ?? '';
+          const dni    = String(row['DNI']      ?? row['dni']      ?? '').trim();
+          const telefono = String(row['Teléfono'] ?? row['Telefono'] ?? row['telefono'] ?? '').trim();
+          const perfil = (row['Perfil'] ?? row['perfil'] ?? 'Cliente').toString().trim();
+
+          if (!nombre) { rowErrors.push(`Fila ${fila}: falta el campo Nombre`); return; }
+          if (!dni)    { rowErrors.push(`Fila ${fila}: falta el campo DNI`); return; }
+          if (!VALID_PERFILES.includes(perfil as any)) {
+            rowErrors.push(`Fila ${fila}: Perfil inválido "${perfil}". Valores válidos: ${VALID_PERFILES.join(', ')}`);
+            return;
+          }
+
+          usuariosData.push({ nombre, dni, telefono, perfil: perfil as typeof VALID_PERFILES[number] });
+        });
+
+        if (rowErrors.length > 0) {
+          toast.error(`Errores en el archivo:\n${rowErrors.slice(0, 5).join('\n')}${rowErrors.length > 5 ? `\n...y ${rowErrors.length - 5} más` : ''}`, { duration: 6000 });
+          return;
+        }
 
         // Crear usuarios uno por uno para manejar duplicados
         let creados = 0;
         let errores = 0;
 
-        for (const usuario of usuarios) {
+        for (const u of usuariosData) {
           try {
-            await SupabaseService.createUsuario(usuario);
+            await SupabaseService.createUsuario(u);
             creados++;
-          } catch (error) {
+          } catch {
             errores++;
           }
         }
 
-        toast.success(`${creados} usuarios importados correctamente. ${errores} errores.`);
+        // Auditoría de importación masiva
+        if (creados > 0) {
+          SupabaseService.createEvento({
+            tipo: 'Usuario',
+            descripcion: `Importación masiva: ${creados} usuarios creados desde Excel`,
+            modulo: 'Usuarios',
+            accion: 'importacion_masiva',
+            usuario: 'Sistema',
+            severidad: 'info',
+          }).catch(() => {});
+        }
+
+        toast.success(`${creados} usuario(s) importado(s) correctamente.${errores ? ` ${errores} error(es).` : ''}`);
         loadUsuarios();
         financialCacheService.invalidate();
         await loadFinancialData();
