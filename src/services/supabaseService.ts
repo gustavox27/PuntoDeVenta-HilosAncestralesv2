@@ -1154,7 +1154,6 @@ export class SupabaseService {
       const movements: any[] = [];
       let totalAnticiposRegistrados = 0;
       let totalComprasCompletas = 0;
-      let totalDeudasPendientes = 0;
 
       anticipos?.forEach(anticipo => {
         const isUsed = anticipo.venta_id !== null && anticipo.venta_id !== undefined;
@@ -1176,7 +1175,6 @@ export class SupabaseService {
       ventas?.forEach(venta => {
         const montoFinal = venta.total - (venta.descuento_total || 0);
         const saldoPendiente = venta.saldo_pendiente || 0;
-        const montoPagado = montoFinal - saldoPendiente;
 
         let descripcion = `Compra - ${venta.detalles?.map((d: any) => d.producto?.nombre).join(', ') || 'Productos'}`;
         if (saldoPendiente > 0) {
@@ -1187,7 +1185,7 @@ export class SupabaseService {
           id: venta.id,
           type: 'egreso',
           fecha: venta.fecha_venta,
-          monto: montoPagado,
+          monto: montoFinal,
           descripcion: descripcion,
           total_venta: venta.total,
           descuento: venta.descuento_total || 0,
@@ -1197,22 +1195,8 @@ export class SupabaseService {
           subtype: 'compra'
         });
 
-        if (venta.completada && venta.saldo_pendiente && venta.saldo_pendiente > 0) {
+        if (venta.completada) {
           totalComprasCompletas += montoFinal;
-          movements.push({
-            id: `pago_${venta.id}`,
-            type: 'ingreso',
-            fecha: venta.fecha_venta,
-            monto: venta.saldo_pendiente,
-            descripcion: 'Pago Completado',
-            metodo_pago: 'efectivo',
-            venta_id: venta.id,
-            subtype: 'pago_efectivo'
-          });
-        } else if (venta.completada) {
-          totalComprasCompletas += montoFinal;
-        } else if (venta.saldo_pendiente && venta.saldo_pendiente > 0) {
-          totalDeudasPendientes += venta.saldo_pendiente;
         }
       });
 
@@ -1226,8 +1210,9 @@ export class SupabaseService {
         .filter(m => m.type === 'egreso')
         .reduce((sum, m) => sum + m.monto, 0);
 
-      const saldoDisponible = Math.max(0, totalIngreso - totalEgreso);
-      const deudaPendiente = totalDeudasPendientes;
+      const neto = totalIngreso - totalEgreso;
+      const saldoDisponible = Math.max(0, neto);
+      const deudaPendiente = Math.max(0, -neto);
 
       return {
         movements,
@@ -1237,7 +1222,7 @@ export class SupabaseService {
         totalEgreso,
         totalAnticiposRegistrados,
         totalComprasCompletas,
-        totalDeudasPendientes
+        totalDeudasPendientes: deudaPendiente
       };
     } catch (error) {
       throw error;

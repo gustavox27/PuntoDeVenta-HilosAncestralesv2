@@ -75,6 +75,7 @@ Notas técnicas:
 - Los archivos PWA están en `project/public/`: `manifest.json`, `sw.js`, `icon-192.svg`, `icon-512.svg`.
 - Para íconos PNG de mayor compatibilidad en Android < Chrome 93, reemplazar los `.svg` por `.png` del mismo nombre y actualizar el `manifest.json` (cambia `type` a `"image/png"`).
 - Para verificar: DevTools → Application → Manifest / Service Workers.
+- **Cuidado al probar fixes de frontend**: `sw.js` usa cache-first con `CACHE_NAME` estático — un dispositivo que ya cargó la app puede seguir sirviendo `index.html`/bundle viejo tras un deploy nuevo. Ver detalle en "Flujo Anticipos → Deudas → check_anticipo_usage" más abajo.
 
 ## SQL pendiente (TICKET-INV-01 — ejecutar en Supabase antes de usar Tintorería)
 
@@ -132,6 +133,12 @@ handleHilanderiaSubmit() en Inventario.tsx
 
 ### Flujo Anticipos → Deudas → check_anticipo_usage (protección contra descuadres)
 
+**Estado (Fix Estructural 1) — verificado en local, 2026-07-18:**
+- **Paso 2** (`check_anticipo_usage` detecta aplicaciones vía evento estructurado, no solo `venta_id`): migración `20260717190000_...sql` aplicada en Supabase manualmente vía SQL Editor. Verificado funcionando — vive enteramente en BD, no depende de deploy de frontend.
+- **Paso 1** (botón "Pagar" en `MovementHistory.tsx` usa `aplicar_anticipos_disponibles_a_deudas` en vez del id ficticio `'sistema'`): migración `20260717193000_...sql` aplicada en Supabase. Verificado en local que genera el evento `'Aplicación Automática de Anticipo'` con `entidad_id` = UUID real del anticipo (no `'sistema'`), y que el borrado de ese anticipo queda bloqueado con el mensaje de error correcto.
+- **Pendiente**: `git push` de los commits `de8b556` (Paso 2) y `158c03d` (Paso 1) — quedaron solo en local. Se hará al final, cuando el resto de tickets relacionados esté resuelto. Hasta entonces, cualquier entorno desplegado desde `origin/main` sigue corriendo el código viejo del botón "Pagar" (síntoma observado: eventos con `entidad_id='sistema'` seguían apareciendo en pruebas posteriores al fix local).
+- **Hallazgo relacionado (sin corregir, ticket futuro)**: el service worker (`public/sw.js`) usa `CACHE_NAME` estático (`'hilos-ancestrales-v1'`) con estrategia cache-first sobre `index.html`, sin invalidación ligada al build. Esto significa que, incluso después de desplegar un fix de frontend, un navegador/dispositivo que ya cargó la app antes puede seguir sirviendo `index.html`/bundle viejo indefinidamente. Para que un fix de frontend se refleje hay que forzar DevTools → Application → Service Workers → Unregister + Clear site data (o desinstalar/reinstalar la PWA en Android) — un simple hard refresh no basta.
+
 ```
 aplicarAnticipoADeudasFallback() (supabaseService.ts)
   → ventas: UPDATE saldo_pendiente, anticipo_total, estado_pago, completada
@@ -153,6 +160,31 @@ aplicarAnticipoADeudasFallback() (supabaseService.ts)
 **Regla crítica de esta función**: nunca escribe `anticipos.venta_id` ni el monto completo de un anticipo en `ventas.anticipo_total` de una sola venta. `anticipo_total` se incrementa, por cada venta, solo en el monto realmente aplicado a ESA venta (`LEAST(saldo_pendiente_de_la_venta, remanente_del_anticipo)`). Esto es deliberado: existe un bug distinto y ya identificado en `Ventas.tsx:566-589` (flujo de "usar anticipo disponible" al crear una venta NUEVA) que sí hace esto mal — vincula el anticipo COMPLETO (`venta_id`) a una sola venta sin importar si esa venta solo necesitaba una fracción, inflando el `anticipo_total` de esa venta al monto total del anticipo. Ese bug no se corrigió en este ticket (alcance distinto); no usar ese patrón como referencia al tocar código de anticipos.
 
 **Call-site 1, sin tocar**: `Ventas.tsx:handleAplicarDeudas` (se dispara tras registrar un anticipo nuevo, vía `DebtDetectionModal`) sigue usando `aplicarAnticipoADeudas` → `aplicarAnticipoADeudasFallback`, sin cambios.
+
+### Fix de cálculo — `getMovementHistory` (Saldo Disponible / Deuda Pendiente)
+
+**Implementado y verificado, 2026-07-18.** `getMovementHistory` (`supabaseService.ts`) calculaba mal los dos números que muestra el "Historial de Movimientos":
+- El egreso de cada compra se registraba como `total - saldo_pendiente` (lo pagado), no el total real — subestimaba sistemáticamente cuánto había comprado el cliente.
+- `saldoDisponible` recortaba con `Math.max(0, ingreso - egreso)`, escondiendo el déficit real cuando el cliente debía más de lo que tenía en anticipos.
+- `deudaPendiente` se calculaba por una ruta aparte (`Σ saldo_pendiente` de ventas con `completada=false`), sin reconciliarse con ingresos/egresos.
+
+Fórmula corregida:
+```
+totalIngreso = Σ anticipos.monto                          (sin cambio, nunca fue el problema)
+totalEgreso  = Σ (venta.total - venta.descuento_total)     (total real de la compra, no lo pagado)
+neto = totalIngreso - totalEgreso
+saldoDisponible = Math.max(0, neto)
+deudaPendiente  = Math.max(0, -neto)
+```
+Un solo neto, partido en dos números mutuamente excluyentes (nunca ambos > 0). Esto también resuelve, como efecto colateral y sin tocar nada más, el caso de un anticipo consumido solo parcialmente que antes seguía contando su monto completo como disponible — ya no hace falta rastrear cuánto se consumió de cada anticipo individual, porque `totalEgreso` ya refleja el total real de lo comprado.
+
+Se eliminó la rama que generaba el movimiento sintético `pago_${venta.id}` ("Pago Completado") — era un parche para compensar el egreso subestimado; ya no es necesario.
+
+Criterio de aceptación validado: cliente MICHAEL APAZA CAJMA (`b8b90e89-0823-4c60-8c4a-73e3cc274051`) — `totalIngreso=77,185.77`, `totalEgreso=81,000.00` → `saldoDisponible=0.00`, `deudaPendiente=3,814.23`.
+
+**Limitaciones conocidas (no resueltas por este fix):**
+1. `obtenerDeudasCliente`/`calcularTotalDeuda` (usadas por el flujo "Pagar" para seleccionar QUÉ ventas específicas pagar) siguen sumando `ventas.saldo_pendiente` fila por fila — una fuente de verdad distinta a la resta agregada de `getMovementHistory`. Para un cliente con `saldo_pendiente` corrompido por el bug de `Ventas.tsx:566-589` (ver arriba), el número agregado (`deudaPendiente`) y la lista de ventas del botón "Pagar" pueden no cuadrar entre sí hasta que ese bug de datos se corrija.
+2. Las anotaciones por venta dentro de `movements` (el texto "Saldo pendiente S/ X" y los campos `saldo_pendiente`/`estado_pago` de cada línea de compra) siguen leyendo `venta.saldo_pendiente` directamente — si una venta puntual tiene ese campo corrompido por el mismo bug, esa línea individual puede seguir mostrando un monto incorrecto aunque las tarjetas agregadas (Saldo Disponible / Deuda Pendiente) ya sean correctas.
 
 ### Auth — custom vs Supabase Auth
 
