@@ -2028,4 +2028,26 @@ export class SupabaseService {
       }
     ];
   }
+
+  // Consume anticipos reales disponibles del cliente (FIFO por fecha_anticipo)
+  // para pagar las ventas seleccionadas. A diferencia de aplicarAnticipoADeudas,
+  // no recibe un anticipoId ni un monto agregado: los deriva de los anticipos
+  // reales con venta_id = NULL, para que cada aplicación quede rastreable
+  // (evento 'Aplicación Automática de Anticipo' con el id real del anticipo).
+  static async aplicarAnticiposDisponiblesADeudas(
+    clienteId: string,
+    ventasIds: string[],
+    usuarioActual: string = 'Sistema'
+  ) {
+    const { data, error } = await supabase
+      .rpc('aplicar_anticipos_disponibles_a_deudas', {
+        p_cliente_id: clienteId,
+        p_ventas_ids: ventasIds,
+        p_usuario_actual: usuarioActual
+      });
+
+    if (error) throw error;
+    if (!data.success) throw new Error(data.error || 'Error al aplicar anticipos a deudas');
+    return data;
+  }
 }

@@ -117,10 +117,8 @@ const MovementHistory: React.FC<MovementHistoryProps> = ({ usuarioId, usuarioNom
 
     try {
       setIsPayingDebt(true);
-      await SupabaseService.aplicarAnticipoADeudas(
+      await SupabaseService.aplicarAnticiposDisponiblesADeudas(
         usuarioId,
-        'sistema',
-        historyData.saldoDisponible,
         ventasIds,
         'Sistema'
       );
