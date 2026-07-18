@@ -75,7 +75,19 @@ Notas técnicas:
 - Los archivos PWA están en `project/public/`: `manifest.json`, `sw.js`, `icon-192.svg`, `icon-512.svg`.
 - Para íconos PNG de mayor compatibilidad en Android < Chrome 93, reemplazar los `.svg` por `.png` del mismo nombre y actualizar el `manifest.json` (cambia `type` a `"image/png"`).
 - Para verificar: DevTools → Application → Manifest / Service Workers.
-- **Cuidado al probar fixes de frontend**: `sw.js` usa cache-first con `CACHE_NAME` estático — un dispositivo que ya cargó la app puede seguir sirviendo `index.html`/bundle viejo tras un deploy nuevo. Ver detalle en "Flujo Anticipos → Deudas → check_anticipo_usage" más abajo.
+
+### Estrategia de caché del Service Worker (`public/sw.js`)
+
+**Corregido, 2026-07-18 (CACHE_NAME `v1` → `v2`).** La versión original usaba cache-first para **todo**, incluido `index.html`, con un `CACHE_NAME` estático que nunca cambiaba entre builds. Como `index.html` es la URL que decide qué bundle JS cargar (los bundles de Vite sí tienen hash de contenido en el nombre), un dispositivo que ya había cargado la app seguía sirviendo un `index.html` viejo — apuntando a un bundle viejo — indefinidamente después de cada deploy nuevo, sin ninguna forma de que el usuario se enterara. Esto obligó a hacer Unregister + Clear site data manualmente durante los fixes anteriores (Pasos 1-2 y el fix de cálculo de `getMovementHistory`).
+
+Estrategia actual:
+- **Navegación (`event.request.mode === 'navigate'`, o sea cargar `index.html`)**: *network-first* con timeout de 4s. Si hay red, siempre trae la versión desplegada más reciente. Si no hay red o no responde a tiempo, cae a la copia cacheada — el soporte offline para trabajadores en campo sin señal se mantiene igual que antes.
+- **Todo lo demás (assets con hash de Vite, íconos, etc.)**: cache-first, sin cambios — es seguro porque la URL de un asset cambia si su contenido cambia; nunca puede servir una versión vieja bajo una URL nueva.
+- `skipWaiting()`/`clients.claim()` se mantienen (ya estaban) — el SW nuevo toma control sin esperar a que se cierren pestañas.
+
+**A partir de este deploy, las actualizaciones llegan solas, sin intervención del usuario**: el navegador revisa si `/sw.js` cambió cada vez que se abre la app (mecanismo del propio navegador, no pasa por el `fetch` handler del SW activo), instala el SW nuevo en segundo plano si detecta diferencias, y lo activa de inmediato gracias a `skipWaiting`/`clients.claim`. Esto aplica también a la PWA ya instalada en Android — no hace falta desinstalar/reinstalar, basta con abrir la app una vez con conexión.
+
+**No fue necesario tocar** `manifest.json` ni el script de registro en `index.html` — la instalabilidad de la PWA (ícono, `display: standalone`, banner "Agregar a la pantalla de inicio") no depende de la estrategia de fetch del SW, solo de que exista un manifest válido y un SW registrado con un `fetch` handler, ambos intactos.
 
 ## SQL pendiente (TICKET-INV-01 — ejecutar en Supabase antes de usar Tintorería)
 
