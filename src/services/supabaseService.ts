@@ -2035,4 +2035,29 @@ export class SupabaseService {
     if (!data.success) throw new Error(data.error || 'Error al aplicar anticipos a deudas');
     return data;
   }
+
+  // Deja constancia (evento estructurado, sin tocar anticipos.venta_id ni
+  // ventas) de que `monto` de crédito disponible del cliente se consideró
+  // aplicado a la venta indicada, para que check_anticipo_usage proteja los
+  // anticipos reales involucrados. No recalcula anticipo_total/saldo_pendiente
+  // de la venta — eso ya lo hizo correctamente el cálculo de Ventas.tsx antes
+  // de crear la venta.
+  static async marcarAnticiposConsumidos(
+    clienteId: string,
+    monto: number,
+    ventaReferenciaId: string,
+    usuarioActual: string = 'Sistema'
+  ) {
+    const { data, error } = await supabase
+      .rpc('marcar_anticipos_consumidos', {
+        p_cliente_id: clienteId,
+        p_monto: monto,
+        p_venta_referencia_id: ventaReferenciaId,
+        p_usuario_actual: usuarioActual
+      });
+
+    if (error) throw error;
+    if (!data.success) throw new Error(data.error || 'Error al marcar anticipos como consumidos');
+    return data;
+  }
 }

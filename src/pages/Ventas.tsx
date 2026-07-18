@@ -564,27 +564,16 @@ const Ventas: React.FC<VentasProps> = ({ currentUser }) => {
         const montoAAplicar = Math.min(anticipoActualmenteDisponible, montoRestanteDeAnticipo);
 
         if (montoAAplicar > 0) {
-          const anticiposPrevios = historyData.movements
-            .filter(m => m.subtype === 'anticipo' && !m.is_anticipo_used)
-            .map(m => ({
-              id: m.id,
-              monto: m.monto,
-              venta_id: m.venta_id
-            }));
-          const anticiposSinVenta = anticiposPrevios.filter(a => !a.venta_id);
-
-          let montoAplicado = 0;
-
-          for (const anticipo of anticiposSinVenta) {
-            if (montoAplicado >= montoAAplicar) {
-              break;
-            }
-
-            await SupabaseService.updateAnticipo(anticipo.id, {
-              venta_id: ventaCreada.id
-            });
-
-            montoAplicado += anticipo.monto;
+          try {
+            await SupabaseService.marcarAnticiposConsumidos(
+              usuarioSeleccionado.id,
+              montoAAplicar,
+              ventaCreada.id,
+              currentUser?.nombre || 'Sistema'
+            );
+          } catch (error) {
+            console.error('Error marcando anticipos como consumidos:', error);
+            toast.error('Advertencia: no se pudo registrar el consumo de anticipos disponibles');
           }
         }
       }
